@@ -2,20 +2,20 @@
 
 Thesis project (Civil and Environmental Engineering): an application that lets a user build a multilayer wall from materials and dimensions, calculates its steady-state thermal properties, and (in later stages) shows it in interactive 3D.
 
-## Current status: Stage 3 of 8 — material database
+## Current status: Stage 4 of 8 — wall editor
 
 | Stage | Content | State |
 |---|---|---|
 | 1 | Repository inspection, architecture | done |
 | 2 | Thermal calculation engine + tests | done |
-| **3** | **Material database, custom materials** | **done (all values illustrative)** |
-| 4 | Wall editor + input validation (UI) | not started |
+| 3 | Material database, custom materials | done (all values illustrative) |
+| **4** | **Wall editor + input validation (UI)** | **done** |
 | 5 | Interactive 3D visualisation | not started |
 | 6 | Temperature profile, results, comparison charts | not started |
 | 7 | Reports and source documentation | not started |
 | 8 | Full testing, limitations | not started |
 
-There is **no user interface yet**. What exists is the engine (pure calculation code), the material database, and their tests.
+A browser editor exists (`npm run dev`): build a multilayer wall, choose materials, enter thicknesses and conditions, with live validation. It does **not** show calculation results or 3D yet (Stages 5-6). See `docs/wall-editor.md`.
 
 ## What the engine calculates
 
@@ -35,6 +35,8 @@ Requires Node.js 22.12 or newer (the test tool Vitest 5 supports Node 22 and 24;
 ```bash
 npm install            # one-time: downloads the development tools
 npm test               # runs all automated tests
+npm run dev            # start the editor in your browser (http://localhost:5173)
+npm run build          # type-check and build the app into dist/
 npm run typecheck      # checks types (catches unit/field mix-ups before running)
 npm run test:coverage  # tests + which lines of src/ were executed
 python3 validation/reference_cases.py   # regenerate independent reference values (rarely needed)
@@ -44,11 +46,15 @@ python3 validation/reference_cases.py   # regenerate independent reference value
 
 ```
 src/engine/       Calculation engine (pure maths, no UI). Start with calculateWall.ts.
+src/editor/       Wall editor logic: draft, unit conversion, validation (no screen code).
+src/ui/           The browser screen (only displays the editor state).
 src/materials/    Material database (data in a JSON file), search, custom materials, export.
 src/units/        Unit conversions (mm↔m, kWh↔J, °C↔K↔°F, …). The engine only sees SI.
 tests/            Automated tests; tests/fixtures/ holds the independent reference values.
 validation/       Script and write-up that produce/justify the reference values.
 docs/             Equations, assumptions, limitations, and the register of sources.
 ```
+
+`index.html` is the browser entry page.
 
 Planned (later stages): `src/geometry/`, `src/viewer3d/`, `src/charts/`, `src/ui/`, `src/report/`.

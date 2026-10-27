@@ -39,6 +39,14 @@ describe('createCustomMaterial', () => {
     expect(warnings).toEqual([]);
   });
 
+  it('defaults to value type "unspecified" and source type "none"; a note makes the source a "user-note"', () => {
+    expect(createCustomMaterial(input).material.valueType).toBe('unspecified');
+    expect(createCustomMaterial(input).material.source.type).toBe('none');
+    const withNote = createCustomMaterial({ ...input, sourceNote: 'lab report', valueType: 'measured' }).material;
+    expect(withNote.valueType).toBe('measured');
+    expect(withNote.source.type).toBe('user-note');
+  });
+
   it('keeps the user\'s source note and category', () => {
     const { material } = createCustomMaterial({ ...input, category: 'Mineral wool', sourceNote: 'Brand X datasheet rev. 3' });
     expect(material.category).toBe('Mineral wool');

@@ -39,8 +39,41 @@ export const SI_MATERIAL_UNITS: MaterialUnits = {
   specificHeat: 'J/(kg·K)',
 };
 
+/**
+ * What kind of thermal value a record holds. These are different things and
+ * must not be mixed up:
+ *  - measured:    result of a measurement on a specific specimen under stated
+ *                 conditions (e.g. a heat-flow-meter test).
+ *  - declared:    value declared by a manufacturer for a product under the
+ *                 reference conditions of its declaration.
+ *  - design:      value stated by its source for use in design calculations
+ *                 (EN ISO 10456 describes procedures for declared and design
+ *                 values; a regulation or table may also tabulate them).
+ *  - unspecified: the record does not say (always the case for illustrative data).
+ */
+export const THERMAL_VALUE_TYPES = ['measured', 'declared', 'design', 'unspecified'] as const;
+export type ThermalValueType = (typeof THERMAL_VALUE_TYPES)[number];
+
+/**
+ * The kind of source behind a record, following the project's reference
+ * hierarchy: standards first, then regulation/guidance, then manufacturer
+ * datasheets and published research, then supplementary reference tables.
+ */
+export const SOURCE_TYPES = [
+  'standard',
+  'regulation-or-guidance',
+  'manufacturer-datasheet',
+  'published-research',
+  'reference-table',
+  'user-note',
+  'none',
+] as const;
+export type SourceType = (typeof SOURCE_TYPES)[number];
+
 /** Where a record's numbers come from. */
 export interface MaterialSource {
+  /** What kind of source this is. `none` means there is no source. */
+  type: SourceType;
   /**
    * Human-readable reference. For `illustrative` and `user-defined` records it
    * must say plainly that there is no source.
@@ -77,6 +110,8 @@ export interface MaterialRecord {
   additionalProperties?: AdditionalProperty[];
   units: MaterialUnits;
   status: DataStatus;
+  /** Measured, declared or design value (see ThermalValueType). */
+  valueType: ThermalValueType;
   source: MaterialSource;
   /** Conditions the values apply to (moisture, temperature, product grade …), if known. */
   conditions?: string;
@@ -93,6 +128,8 @@ export interface CustomMaterialInput {
   specificHeatJPerKgK?: number;
   /** Where the user got the numbers (datasheet, measurement …). Free text. */
   sourceNote?: string;
+  /** What kind of value this is. Defaults to "unspecified". */
+  valueType?: ThermalValueType;
 }
 
 export interface MaterialFilter {

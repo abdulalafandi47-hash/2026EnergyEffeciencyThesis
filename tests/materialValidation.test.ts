@@ -11,7 +11,9 @@ const paths = (issues: ValidationIssue[]): string[] => issues.map((i) => i.path)
 const verifiedRecord = (): MaterialRecord => ({
   ...base,
   status: 'verified',
+  valueType: 'declared',
   source: {
+    type: 'manufacturer-datasheet',
     citation: 'Synthetic test citation (not a real source)',
     location: 'Table X, row Y',
     checkedOn: '2026-01-31',
@@ -106,13 +108,43 @@ describe('validateMaterial: status and source (protects against over-claiming)',
   it('rejects an unknown status and a missing source or citation', () => {
     expect(paths(validateMaterial({ ...base, status: wrong('certified') }))).toEqual(['status']);
     expect(paths(validateMaterial({ ...base, source: undefined }))).toEqual(['source']);
-    expect(paths(validateMaterial({ ...base, source: { citation: ' ' } }))).toEqual(['source.citation']);
+    expect(paths(validateMaterial({ ...base, source: { ...base.source, citation: ' ' } }))).toEqual(['source.citation']);
   });
 
   it('requires at least one non-empty limitation', () => {
     expect(paths(validateMaterial({ ...base, assumptionsAndLimitations: [] }))).toEqual(['assumptionsAndLimitations']);
     expect(paths(validateMaterial({ ...base, assumptionsAndLimitations: [' '] }))).toEqual(['assumptionsAndLimitations']);
     expect(paths(validateMaterial({ ...base, assumptionsAndLimitations: undefined }))).toEqual(['assumptionsAndLimitations']);
+  });
+});
+
+describe('validateMaterial: value type and source type (measured / declared / design)', () => {
+  it.each(['measured', 'declared', 'design', 'unspecified'] as const)('accepts value type %s on a non-verified record', (valueType) => {
+    // illustrative records must be "unspecified", so use an unverified one
+    const record: MaterialRecord = { ...base, status: 'unverified', valueType, source: { ...base.source, type: 'reference-table' } };
+    expect(validateMaterial(record)).toEqual([]);
+  });
+
+  it('rejects unknown value types and source types', () => {
+    expect(paths(validateMaterial({ ...base, valueType: wrong('typical') }))).toContain('valueType');
+    expect(paths(validateMaterial({ ...base, source: { ...base.source, type: wrong('blog') } }))).toContain('source.type');
+    expect(paths(validateMaterial({ ...base, valueType: undefined }))).toContain('valueType');
+  });
+
+  it('an illustrative record must be "unspecified" with source type "none"', () => {
+    expect(paths(validateMaterial({ ...base, valueType: 'design' }))).toEqual(['status']);
+    expect(paths(validateMaterial({ ...base, source: { ...base.source, type: 'standard' } }))).toEqual(['status']);
+  });
+
+  it('a verified record cannot have value type "unspecified" or source type "none"/"user-note"', () => {
+    const ok = verifiedRecord();
+    expect(paths(validateMaterial({ ...ok, valueType: 'unspecified' }))).toEqual(['valueType']);
+    expect(paths(validateMaterial({ ...ok, source: { ...ok.source, type: 'none' } }))).toEqual(['source.type']);
+    expect(paths(validateMaterial({ ...ok, source: { ...ok.source, type: 'user-note' } }))).toEqual(['source.type']);
+  });
+
+  it.each(['measured', 'declared', 'design'] as const)('a verified record may be a %s value', (valueType) => {
+    expect(validateMaterial({ ...verifiedRecord(), valueType })).toEqual([]);
   });
 });
 

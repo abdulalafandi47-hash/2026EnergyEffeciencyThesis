@@ -6,9 +6,15 @@
     "lambdaWPerMK": 1.7,
     "densityKgPerM3": 2300,
     "specificHeatJPerKgK": 1000,
-    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "units": {
+      "conductivity": "W/(m·K)",
+      "density": "kg/m³",
+      "specificHeat": "J/(kg·K)"
+    },
     "status": "illustrative",
+    "valueType": "unspecified",
     "source": {
+      "type": "none",
       "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
     },
     "conditions": "Not specified: moisture content, mean temperature and mix are undefined.",
@@ -25,9 +31,15 @@
     "lambdaWPerMK": 1.0,
     "densityKgPerM3": 1800,
     "specificHeatJPerKgK": 1000,
-    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "units": {
+      "conductivity": "W/(m·K)",
+      "density": "kg/m³",
+      "specificHeat": "J/(kg·K)"
+    },
     "status": "illustrative",
+    "valueType": "unspecified",
     "source": {
+      "type": "none",
       "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
     },
     "conditions": "Not specified: moisture content, mean temperature and mix are undefined.",
@@ -43,9 +55,15 @@
     "lambdaWPerMK": 0.43,
     "densityKgPerM3": 1200,
     "specificHeatJPerKgK": 1000,
-    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "units": {
+      "conductivity": "W/(m·K)",
+      "density": "kg/m³",
+      "specificHeat": "J/(kg·K)"
+    },
     "status": "illustrative",
+    "valueType": "unspecified",
     "source": {
+      "type": "none",
       "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
     },
     "conditions": "Not specified: moisture content, mean temperature and product are undefined.",
@@ -61,9 +79,15 @@
     "lambdaWPerMK": 0.7,
     "densityKgPerM3": 1800,
     "specificHeatJPerKgK": 900,
-    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "units": {
+      "conductivity": "W/(m·K)",
+      "density": "kg/m³",
+      "specificHeat": "J/(kg·K)"
+    },
     "status": "illustrative",
+    "valueType": "unspecified",
     "source": {
+      "type": "none",
       "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
     },
     "conditions": "Not specified: moisture content, mean temperature and brick type are undefined.",
@@ -80,9 +104,15 @@
     "lambdaWPerMK": 0.9,
     "densityKgPerM3": 1600,
     "specificHeatJPerKgK": 1000,
-    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "units": {
+      "conductivity": "W/(m·K)",
+      "density": "kg/m³",
+      "specificHeat": "J/(kg·K)"
+    },
     "status": "illustrative",
+    "valueType": "unspecified",
     "source": {
+      "type": "none",
       "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
     },
     "conditions": "Not specified: moisture content, mean temperature, block type and void content are undefined.",
@@ -99,9 +129,15 @@
     "lambdaWPerMK": 0.035,
     "densityKgPerM3": 25,
     "specificHeatJPerKgK": 1450,
-    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "units": {
+      "conductivity": "W/(m·K)",
+      "density": "kg/m³",
+      "specificHeat": "J/(kg·K)"
+    },
     "status": "illustrative",
+    "valueType": "unspecified",
     "source": {
+      "type": "none",
       "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
     },
     "conditions": "Not specified: product grade, moisture content and mean temperature are undefined.",
@@ -117,9 +153,15 @@
     "lambdaWPerMK": 0.034,
     "densityKgPerM3": 35,
     "specificHeatJPerKgK": 1450,
-    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "units": {
+      "conductivity": "W/(m·K)",
+      "density": "kg/m³",
+      "specificHeat": "J/(kg·K)"
+    },
     "status": "illustrative",
+    "valueType": "unspecified",
     "source": {
+      "type": "none",
       "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
     },
     "conditions": "Not specified: product grade, moisture content and mean temperature are undefined.",
@@ -135,9 +177,15 @@
     "lambdaWPerMK": 0.037,
     "densityKgPerM3": 40,
     "specificHeatJPerKgK": 1030,
-    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "units": {
+      "conductivity": "W/(m·K)",
+      "density": "kg/m³",
+      "specificHeat": "J/(kg·K)"
+    },
     "status": "illustrative",
+    "valueType": "unspecified",
     "source": {
+      "type": "none",
       "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
     },
     "conditions": "Not specified: product type, moisture content and mean temperature are undefined.",
@@ -153,9 +201,15 @@
     "lambdaWPerMK": 0.025,
     "densityKgPerM3": 35,
     "specificHeatJPerKgK": 1400,
-    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "units": {
+      "conductivity": "W/(m·K)",
+      "density": "kg/m³",
+      "specificHeat": "J/(kg·K)"
+    },
     "status": "illustrative",
+    "valueType": "unspecified",
     "source": {
+      "type": "none",
       "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
     },
     "conditions": "Not specified: product type, facing, moisture content and mean temperature are undefined.",

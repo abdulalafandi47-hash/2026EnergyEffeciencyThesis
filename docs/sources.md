@@ -2,7 +2,34 @@
 
 Keep this file up to date as the project evolves. A source only counts as **verified** once someone has checked the number or rule against the source itself, not against a summary of it.
 
-Last updated: 2026-10-27 (Stage 2).
+Last updated: 2026-10-27 (Stage 4).
+
+## 0. Reference hierarchy and data policy (set for Stage 4)
+
+When sources disagree or overlap, they rank in this order:
+
+1. **CYS EN ISO 6946** (the Cyprus adoption of EN ISO 6946): the calculation method for thermal resistance and transmittance of multilayer components, within the standard's scope and with any corrections.
+2. **EN ISO 10456**: methodology for declared and design thermal values and for converting values between conditions.
+3. **Applicable Cyprus building-energy legislation and official guidance**: establishes the regulatory context. **No compliance is claimed** until the applicable requirements and editions have been verified.
+4. **Manufacturer technical datasheets and published HTI / Brunel research**: potential sources of material properties. Record the original source, material specification, units and conditions.
+5. **SEAI material tables**: supplementary reference data only; not automatically the governing source for Cypriot design values.
+
+Rules that follow from this (enforced in code where possible):
+
+- Nothing is invented: no property values, citations, standard clauses or regulatory requirements.
+- Measured, declared and design thermal values are different. Every material record states its `valueType` (`measured` / `declared` / `design` / `unspecified`) and `source.type`; a `verified` record may not be `unspecified`.
+- Provisional and illustrative data stay labelled as such everywhere they are shown.
+- The application does not convert values between conditions; EN ISO 10456 conversion procedures are **not implemented**.
+- No value is presented as an approved Cypriot design value. The editor shows that statement on every material.
+
+### Cyprus status of the references (searched 2026-10-27; nothing here has been read or verified)
+
+| Item | What was found | Status |
+|---|---|---|
+| CYS (Cyprus Organisation for Standardisation) adoption of EN ISO 6946 | A search found no CYS-specific listing, national designation, adoption date or national amendments. The international/EN edition found was ISO 6946:2017 (EN ISO 6946:2017, with a 2021 correction mentioned in a DIN catalogue entry). | **Unconfirmed.** Ask CYS or the library which edition is the current Cyprus adoption. |
+| KDP 429/2006, "Roads and Buildings (Energy Performance of Buildings) Regulations 2006" | A search result (a ucm.org.cy PDF titled "ΚΔΠ 429/2006 Οδών και Οικοδομών Ενεργειακή Απόδοση των Κτηρίων Κανονισμοί του 2006") appears to be this regulation. | Not read. |
+| KDP 121/2020, minimum energy-performance requirements order | A search summary describes it as the current order for new buildings and major renovations, effective 1 July 2020, replacing KDP 568/2007. | Not read; the summary may be wrong. Its U-value limits and calculation methodology were **not found** and are **not used** anywhere in the code. |
+| ETEK (Cyprus Scientific and Technical Chamber) guidance pages | Appeared in search results. | Not read. |
 
 ## 1. Standards considered
 

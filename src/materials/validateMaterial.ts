@@ -1,6 +1,6 @@
 import { numberIssue } from '../engine';
 import type { ValidationIssue } from '../engine';
-import { MATERIAL_CATEGORIES, SI_MATERIAL_UNITS } from './types';
+import { MATERIAL_CATEGORIES, SI_MATERIAL_UNITS, SOURCE_TYPES, THERMAL_VALUE_TYPES } from './types';
 import type { MaterialRecord } from './types';
 
 const STATUSES: readonly unknown[] = ['verified', 'unverified', 'illustrative', 'user-defined'];
@@ -103,10 +103,31 @@ export function validateMaterial(record: unknown): ValidationIssue[] {
   if (!STATUSES.includes(status)) {
     problem('invalid-option', 'status', 'Status must be "verified", "unverified", "illustrative" or "user-defined".');
   }
+  if (!(THERMAL_VALUE_TYPES as readonly unknown[]).includes(record.valueType)) {
+    problem('invalid-option', 'valueType', `Value type must be one of: ${THERMAL_VALUE_TYPES.join(', ')}.`);
+  }
   const source = record.source;
   if (!isRecord(source)) {
     problem('missing-value', 'source', 'A source is required (for unsourced values, say so in the citation).');
   } else {
+    if (!(SOURCE_TYPES as readonly unknown[]).includes(source.type)) {
+      problem('invalid-option', 'source.type', `Source type must be one of: ${SOURCE_TYPES.join(', ')}.`);
+    }
+    if (status === 'illustrative' && (source.type !== 'none' || record.valueType !== 'unspecified')) {
+      problem(
+        'invalid-option',
+        'status',
+        'An illustrative value has no source and no stated value type: use source.type "none" and valueType "unspecified".',
+      );
+    }
+    if (status === 'verified') {
+      if (source.type === 'none' || source.type === 'user-note') {
+        problem('invalid-option', 'source.type', 'A verified value needs a real source type (standard, regulation, datasheet, research or reference table).');
+      }
+      if (record.valueType === 'unspecified') {
+        problem('invalid-option', 'valueType', 'A verified value must say whether it is a measured, declared or design value.');
+      }
+    }
     if (isBlank(source.citation)) {
       problem('missing-value', 'source.citation', 'Citation text is required. For unsourced values state clearly that there is no source.');
     }

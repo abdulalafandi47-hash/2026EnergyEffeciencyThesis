@@ -46,7 +46,9 @@ export function createCustomMaterial(
     ...(input?.specificHeatJPerKgK != null ? { specificHeatJPerKgK: input.specificHeatJPerKgK } : {}),
     units: { ...SI_MATERIAL_UNITS },
     status: 'user-defined',
+    valueType: input?.valueType ?? 'unspecified',
     source: {
+      type: note ? 'user-note' : 'none',
       citation: note
         ? `User-entered: ${note}`
         : 'User-entered values; no source stated. Not checked by this application.',

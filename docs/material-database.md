@@ -18,7 +18,9 @@ The calculation engine never imports from `src/materials/`. Material data and ca
 
 ## What a record contains
 
-`id`, `name`, `category`, `lambdaWPerMK`, optional `densityKgPerM3` and `specificHeatJPerKgK`, optional `additionalProperties` (name/value/unit), `units` (always SI; anything else is rejected), `status`, `source` (citation, optional url, location, checkedOn, checkedBy), `conditions`, and `assumptionsAndLimitations`.
+`id`, `name`, `category`, `lambdaWPerMK`, optional `densityKgPerM3` and `specificHeatJPerKgK`, optional `additionalProperties` (name/value/unit), `units` (always SI; anything else is rejected), `status`, **`valueType`** (`measured` / `declared` / `design` / `unspecified`), `source` (**`type`**: standard / regulation-or-guidance / manufacturer-datasheet / published-research / reference-table / user-note / none; citation, optional url, location, checkedOn, checkedBy), `conditions`, and `assumptionsAndLimitations`.
+
+**Measured, declared and design values are different** (see `docs/sources.md` section 0): a measured value belongs to a specimen and its test conditions; a declared value is a manufacturer's declaration under reference conditions; a design value is the one stated for use in design calculations. `unspecified` means the record does not say, and is the only option for illustrative data.
 
 Categories: Concrete, Cement plaster, Gypsum plaster, Clay brick, Concrete block, EPS, XPS, Mineral wool, Polyurethane, Other.
 
@@ -26,9 +28,9 @@ Categories: Concrete, Cement plaster, Gypsum plaster, Clay brick, Concrete block
 
 | Status | Meaning | Enforced by the validator |
 |---|---|---|
-| `verified` | Checked against a named primary source | Needs `source.citation`, `source.location` (table/clause/page), `source.checkedOn` (real date, YYYY-MM-DD), `source.checkedBy`, and `conditions`. |
+| `verified` | Checked against a named primary source | Needs a real `source.type` (not `none`/`user-note`), a `valueType` other than `unspecified`, `source.citation`, `source.location` (table/clause/page), `source.checkedOn` (real date, YYYY-MM-DD), `source.checkedBy`, and `conditions`. |
 | `unverified` | Believed to match a source, not yet checked | Needs a citation. |
-| `illustrative` | Demonstration value | Needs a citation that says there is no source. **May not carry a URL**, so an unsourced number cannot look sourced. |
+| `illustrative` | Demonstration value | Must have `source.type` `none` and `valueType` `unspecified`, and a citation that says there is no source. **May not carry a URL**, so an unsourced number cannot look sourced. |
 | `user-defined` | Entered by the user | Created by `createCustomMaterial`; the application does not check them. |
 
 When a layer built from `illustrative` or `unverified` data is used in a calculation, the engine adds a warning to the result (`layer-properties-not-verified`) naming those layers.
