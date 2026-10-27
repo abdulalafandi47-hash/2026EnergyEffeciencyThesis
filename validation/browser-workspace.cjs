@@ -208,7 +208,7 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   await page.click('[aria-label="Reset to the 3D view"]'); await settle(450);
 
   // ---------- results panel ----------
-  check('results tabs present and Results selected', (await page.locator('[role="tab"]').count()) === 6 && (await page.getAttribute('#tab-results', 'aria-selected')) === 'true');
+  check('results tabs present and Results selected', (await page.locator('[role="tab"]').count()) === 7 && (await page.getAttribute('#tab-results', 'aria-selected')) === 'true');
   const kpi = async (k) => (await page.locator(`[data-kpi="${k}"] .kpi-number`).innerText()).trim();
   const rTotal = 0.13 + 0.015 / 0.43 + 0.2 / 0.7 + 0.08 / 0.035 + 0.02 / 1 + 0.04;
   const fmt = (n) => String(Number(n.toPrecision(4)));

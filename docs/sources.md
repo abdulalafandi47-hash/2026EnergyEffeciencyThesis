@@ -2,7 +2,9 @@
 
 Keep this file up to date as the project evolves. A source only counts as **verified** once someone has checked the number or rule against the source itself, not against a summary of it.
 
-Last updated: 2026-10-27 (Stage 4).
+Last updated: 2026-10-27 (Stage 4; Stage 7 added the note below).
+
+> **Report content depends on this file.** Every calculation report prints the reference hierarchy, the standards table (section 1), the secondary sources for the surface resistances (section 2) and the material-data leads (section 3), copied into `src/report/content.ts`. A test (`tests/report.test.ts`) fails if a web address or edition printed by the report is missing from this file. When you verify or add a source here, update `content.ts` as well.
 
 ## 0. Reference hierarchy and data policy (set for Stage 4)
 

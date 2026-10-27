@@ -5,6 +5,7 @@
  *   units      ← may use the engine's error type only
  *   materials  ← may use the engine (types, validation helpers) only
  *   editor     ← may use engine, materials, units; never the user interface
+ *   report     ← pure text output; may import engine/editor/analysis for TYPES only
  *   ui         ← may use editor and materials; may import the engine for TYPES only
  *
  * Keeping the screen code away from the engine means the user interface can
@@ -60,9 +61,12 @@ const RULES: Record<string, { allowed: string[]; typeOnlyAllowed?: string[]; fil
   // Dependency-free SVG charts: plain data in, SVG out.
   charts: { allowed: ['charts'] },
   editor: { allowed: ['editor', 'engine', 'materials', 'units'] },
+  // Writes reports from results that already exist. It formats numbers; it never calculates, so it may use the
+  // engine, editor and analysis modules for TYPES only.
+  report: { allowed: ['report'], typeOnlyAllowed: ['analysis', 'editor', 'engine'] },
   // The screen shows what the editor and geometry produce. It may import the engine and the viewer only for TYPES,
   // except the entry file, which loads the viewer on demand.
-  ui: { allowed: ['ui', 'editor', 'materials', 'geometry', 'analysis', 'charts'], typeOnlyAllowed: ['engine', 'viewer3d'], fileExceptions: { 'ui/main.ts': ['viewer3d'] } },
+  ui: { allowed: ['ui', 'editor', 'materials', 'geometry', 'analysis', 'charts', 'report'], typeOnlyAllowed: ['engine', 'viewer3d'], fileExceptions: { 'ui/main.ts': ['viewer3d'] } },
 };
 
 describe('module boundaries', () => {
@@ -94,7 +98,7 @@ describe('module boundaries', () => {
 });
 
 describe('no screen code outside src/ui', () => {
-  for (const module of ['engine', 'units', 'materials', 'editor', 'geometry', 'analysis']) {
+  for (const module of ['engine', 'units', 'materials', 'editor', 'geometry', 'analysis', 'report']) {
     it(`${module}/ does not touch the DOM, window or document`, () => {
       const offenders = sourceFiles(module).filter((file) => /\b(document|window|localStorage|HTMLElement)\b/.test(codeOf(file)));
       expect(offenders).toEqual([]);

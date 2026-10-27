@@ -11,11 +11,15 @@ import { describeDirection, profileForChart, swapLayerMaterial, sweepLayerThickn
 import type { Analysis, Comparison, VariantResult } from '../analysis';
 import { buildBarChart, buildProfileChart } from '../charts';
 import { parseNumberInput } from '../editor';
-import type { LayerView } from '../editor';
+import type { LayerView, WallDraft } from '../editor';
 import type { WallInput } from '../engine';
 import type { MaterialRecord } from '../materials';
+import { buildReport, DEFAULT_REPORT_TITLE, renderHtml, renderJson, renderLayersCsv, renderMarkdown, reportFileBase } from '../report';
+import type { ReportInput } from '../report';
 import { h, show } from './dom';
 import type { Child } from './dom';
+import { browserIo } from './io';
+import type { FileIo } from './io';
 
 /** Results for one valid wall. */
 export interface ResultsData {
@@ -23,17 +27,23 @@ export interface ResultsData {
   wall: WallInput;
   views: LayerView[];
   analysis: Analysis;
+  /** The editor draft the wall was built from (printed in reports as "as entered"). */
+  draft: WallDraft;
+  /** Plausibility warnings from the editor (not errors). */
+  editorWarnings: string[];
 }
 
 interface ResultsInput {
   wall: WallInput | null;
   views: LayerView[];
   analysis: Analysis | null;
+  draft: WallDraft | null;
+  editorWarnings: string[];
   /** True while the editor has errors: the numbers belong to the last valid wall. */
   stale: boolean;
 }
 
-export type TabId = 'results' | 'layers' | 'profile' | 'compare' | 'assumptions' | 'configuration';
+export type TabId = 'results' | 'layers' | 'profile' | 'compare' | 'assumptions' | 'report' | 'configuration';
 
 export interface ResultsPanel {
   element: HTMLElement;
@@ -54,6 +64,7 @@ const TABS: Array<[TabId, string]> = [
   ['profile', 'Temperature profile'],
   ['compare', 'Compare'],
   ['assumptions', 'Assumptions & references'],
+  ['report', 'Report'],
   ['configuration', 'Configuration'],
 ];
 
@@ -68,8 +79,9 @@ const arealCapacity = (jPerM2K: number): string => `${show(jPerM2K / 1000, 4)} k
 const signed = (value: number | null): string => (value === null ? '—' : Math.abs(value) < 1e-9 ? '0 %' : `${value > 0 ? '+' : ''}${show(value, 3)} %`);
 const DIRECTION_WORD = { outward: 'Outward · loss', inward: 'Inward · gain', none: 'None' } as const;
 
-export function createResultsPanel(options: { materials: readonly MaterialRecord[]; announce?: (text: string) => void }): ResultsPanel {
-  let input: ResultsInput = { wall: null, views: [], analysis: null, stale: false };
+export function createResultsPanel(options: { materials: readonly MaterialRecord[]; announce?: (text: string) => void; io?: FileIo }): ResultsPanel {
+  const io = options.io ?? browserIo;
+  let input: ResultsInput = { wall: null, views: [], analysis: null, draft: null, editorWarnings: [], stale: false };
   let active: TabId = 'results';
   let collapsed = false;
   let expanded = false;
@@ -283,6 +295,32 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
     return { values, error: null };
   }
 
+  /** The layers the Compare tab varies: the chosen ones, or by default the layer with the largest resistance (normally the insulation). */
+  function comparedLayers(a: Analysis, wall: WallInput): { thicknessLayer: number; swapLayer: number } {
+    const resistances = a.result.layers.map((l) => l.resistanceM2KPerW);
+    const best = resistances.indexOf(Math.max(...resistances));
+    return {
+      thicknessLayer: Math.min(compareState.layerIndex ?? best, wall.layers.length - 1),
+      swapLayer: Math.min(compareState.swapLayerIndex ?? best, wall.layers.length - 1),
+    };
+  }
+
+  /** The comparisons as currently set up in the Compare tab (those whose settings are valid), for the report. */
+  function currentComparisons(): Comparison[] {
+    const a = input.analysis;
+    const wall = input.wall;
+    if (!a || !wall) return [];
+    const { thicknessLayer, swapLayer } = comparedLayers(a, wall);
+    const found: Comparison[] = [];
+    const thicknesses = parseList(compareState.thicknessesText);
+    if (!thicknesses.error) found.push(sweepLayerThickness(wall, thicknessLayer, thicknesses.values.map((mm) => mm / 1000)));
+    const chosen = options.materials.filter((m) => compareState.swapIds.has(m.id));
+    if (chosen.length > 0) found.push(swapLayerMaterial(wall, swapLayer, chosen));
+    const temperatures = parseList(compareState.temperaturesText);
+    if (!temperatures.error) found.push(sweepOutsideTemperature(wall, temperatures.values));
+    return found;
+  }
+
   function comparisonView(comparison: Comparison, title: string, valueLabel: string): HTMLElement {
     const rows = comparison.variants.map((v, i) => comparisonRow(v, i === 0));
     const chart = buildBarChart(comparison.variants.map((v, i) => ({ label: v.label, value: v.ok ? v.uValueWPerM2K : null, highlight: i === 0 })), { title: `U-value by variant`, unit: 'W/(m²·K)', decimals: 3 });
@@ -329,11 +367,7 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
       panel.replaceChildren(empty('Enter a valid wall in the sidebar to compare alternatives.'));
       return;
     }
-    // Default layer: the one with the largest thermal resistance (normally the insulation).
-    const resistances = a.result.layers.map((l) => l.resistanceM2KPerW);
-    const best = resistances.indexOf(Math.max(...resistances));
-    const thicknessLayer = Math.min(compareState.layerIndex ?? best, wall.layers.length - 1);
-    const swapLayer = Math.min(compareState.swapLayerIndex ?? best, wall.layers.length - 1);
+    const { thicknessLayer, swapLayer } = comparedLayers(a, wall);
 
     // 1. thickness sweep
     const thicknessInput = h('input', { type: 'text', id: 'cmp-thicknesses', autocomplete: 'off', value: compareState.thicknessesText, 'aria-describedby': 'cmp-thicknesses-msg' });
@@ -425,6 +459,133 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
     );
   }
 
+  // ---- report tab ---------------------------------------------------------------------------------------------------------------
+  const reportState = { title: '', notes: '', includeComparisons: false };
+
+  /** Everything a report is made from, or null while the editor has errors (the report must match the inputs on screen). */
+  function reportInput(): ReportInput | null {
+    const { analysis, wall, draft } = input;
+    if (!analysis || !wall || !draft || input.stale) return null;
+    return {
+      title: reportState.title,
+      notes: reportState.notes,
+      generatedAt: io.now(),
+      draft,
+      wall,
+      views: input.views,
+      analysis,
+      comparisons: reportState.includeComparisons ? currentComparisons() : [],
+      editorWarnings: input.editorWarnings,
+    };
+  }
+
+  /** The temperature-profile chart as SVG text, for the HTML report. */
+  function profileChartSvg(a: Analysis): string {
+    const data = profileForChart(a);
+    const chart = buildProfileChart({
+      points: data.points.map((p) => ({ kind: p.kind, label: p.label, xMm: p.xM * 1000, temperatureC: p.temperatureC })),
+      bands: data.bands.map((b) => ({ name: b.name, x0Mm: b.x0M * 1000, x1Mm: b.x1M * 1000 })),
+    });
+    return new XMLSerializer().serializeToString(chart);
+  }
+
+  const REPORT_FORMATS = [
+    ['html', 'Report (HTML)', 'text/html', 'html'],
+    ['markdown', 'Report (Markdown)', 'text/markdown', 'md'],
+    ['json', 'Data (JSON)', 'application/json', 'json'],
+    ['csv', 'Layer table (CSV)', 'text/csv', 'csv'],
+  ] as const;
+
+  function renderReport(): void {
+    const panel = panels.get('report') as HTMLElement;
+    const available = reportInput() !== null;
+    const message = h('p', { class: 'note', role: 'status', 'data-role': 'report-message' });
+    const BLANK = '<!doctype html><meta charset="utf-8"><title>Report preview</title><p style="font-family:sans-serif">No report available.</p>';
+    const preview = h('iframe', { class: 'report-preview', title: 'Report preview', sandbox: '', srcdoc: BLANK, 'data-role': 'report-preview' });
+    let previewHtml = BLANK;
+
+    const updatePreview = (): void => {
+      const rin = reportInput();
+      const html = rin ? renderHtml(buildReport(rin), { profileChartSvg: profileChartSvg(rin.analysis) }) : BLANK;
+      if (html !== previewHtml) {
+        previewHtml = html;
+        preview.setAttribute('srcdoc', html);
+      }
+    };
+
+    const titleInput = h('input', { type: 'text', id: 'report-title', autocomplete: 'off', maxlength: '200', placeholder: DEFAULT_REPORT_TITLE, 'data-role': 'report-title' });
+    titleInput.value = reportState.title;
+    titleInput.addEventListener('input', () => {
+      reportState.title = titleInput.value;
+      updatePreview();
+    });
+    const notesInput = h('textarea', { id: 'report-notes', rows: '3', maxlength: '5000', placeholder: 'Optional: purpose of the calculation, wall location, who reviewed it …', 'data-role': 'report-notes' });
+    notesInput.value = reportState.notes;
+    notesInput.addEventListener('input', () => {
+      reportState.notes = notesInput.value;
+      updatePreview();
+    });
+    const comparisonsBox = h('input', { type: 'checkbox', id: 'report-comparisons', 'data-role': 'report-comparisons' });
+    comparisonsBox.checked = reportState.includeComparisons;
+    comparisonsBox.addEventListener('change', () => {
+      reportState.includeComparisons = comparisonsBox.checked;
+      updatePreview();
+    });
+
+    const exportAs = (format: (typeof REPORT_FORMATS)[number]): void => {
+      const rin = reportInput();
+      if (!rin) return;
+      const model = buildReport(rin);
+      const filename = `${reportFileBase(model)}.${format[3]}`;
+      const text =
+        format[0] === 'html' ? renderHtml(model, { profileChartSvg: profileChartSvg(rin.analysis) })
+        : format[0] === 'markdown' ? renderMarkdown(model)
+        : format[0] === 'json' ? renderJson(model, rin)
+        : renderLayersCsv(rin);
+      io.download(filename, format[2], text);
+      message.textContent = `Saved ${filename} (see your browser's downloads).`;
+      options.announce?.(`${format[1]} saved as ${filename}.`);
+    };
+    const buttons = REPORT_FORMATS.map((format) => {
+      const button = h('button', { type: 'button', class: 'tool', 'data-role': `report-download-${format[0]}`, disabled: !available }, format[1]);
+      button.addEventListener('click', () => exportAs(format));
+      return button;
+    });
+    const printButton = h('button', { type: 'button', class: 'tool', 'data-role': 'report-print', disabled: !available }, 'Print / Save as PDF');
+    printButton.addEventListener('click', () => {
+      const rin = reportInput();
+      if (!rin) return;
+      io.print(renderHtml(buildReport(rin), { profileChartSvg: profileChartSvg(rin.analysis) }));
+      message.textContent = 'Print dialog opened. Choose "Save as PDF" as the printer to make a PDF.';
+    });
+
+    panel.replaceChildren(
+      ...([
+        stale(),
+        input.analysis
+          ? null
+          : empty('Enter a valid wall in the sidebar to make a report.'),
+        input.stale ? h('p', { class: 'note', 'data-role': 'report-blocked' }, 'Reports are switched off while the editor has errors, so a report always describes the inputs shown in the sidebar. Fix the errors to continue.') : null,
+        h(
+          'div',
+          { class: 'report-layout' },
+          h(
+            'div',
+            { class: 'report-controls' },
+            h('div', { class: 'field' }, h('label', { for: 'report-title' }, 'Report title'), titleInput),
+            h('div', { class: 'field' }, h('label', { for: 'report-notes' }, 'Notes (shown in the report)'), notesInput),
+            h('label', { class: 'chip', for: 'report-comparisons' }, comparisonsBox, ' Include the comparisons set up in the Compare tab'),
+            h('div', { class: 'report-buttons', role: 'group', 'aria-label': 'Save or print the report' }, ...buttons, printButton),
+            message,
+            h('p', { class: 'caption' }, 'The report records the inputs as typed and as used, the results, every assumption, the equations, the limitations and the data-status warnings. It is self-contained (no network access, no scripts). Illustrative material values stay labelled as such. A report is not a compliance document.'),
+          ),
+          h('div', { class: 'report-preview-box' }, preview),
+        ),
+      ].filter(Boolean) as Node[]),
+    );
+    updatePreview();
+  }
+
   // ---- drawing -----------------------------------------------------------------------------------------------------------------
   function renderHeadline(): void {
     const a = input.analysis;
@@ -445,6 +606,7 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
       profile: renderProfile,
       compare: renderCompare,
       assumptions: renderAssumptions,
+      report: renderReport,
       configuration: () => undefined,
     })[active]();
   }
@@ -455,7 +617,7 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
     element,
     configurationHost,
     setState(valid, editorHasErrors): void {
-      input = valid ? { wall: valid.wall, views: valid.views, analysis: valid.analysis, stale: editorHasErrors } : { ...input, stale: editorHasErrors };
+      input = valid ? { wall: valid.wall, views: valid.views, analysis: valid.analysis, draft: valid.draft, editorWarnings: valid.editorWarnings, stale: editorHasErrors } : { ...input, stale: editorHasErrors };
       render();
     },
     selectTab: (id) => selectTab(id),

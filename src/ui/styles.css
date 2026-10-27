@@ -60,6 +60,12 @@ p { margin: 4px 0; }
 .validity { margin: 0 0 8px; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.85rem; }
 .validity.ok { color: var(--ok); background: var(--ok-bg); }
 .validity.bad { color: var(--error); background: var(--error-bg); }
+.file-message { margin: 0 0 8px; padding: 3px 8px; border-radius: 6px; font-size: 0.78rem; overflow-wrap: anywhere; }
+.file-message:empty { display: none; }
+.file-message.ok { color: var(--ok); background: var(--ok-bg); }
+.file-message.warn { color: var(--warn); background: var(--warn-bg); }
+.file-message.bad { color: var(--error); background: var(--error-bg); }
+.file-tools { display: inline-flex; gap: 4px; }
 
 /* ---- form controls ---- */
 .grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); }
@@ -67,7 +73,7 @@ p { margin: 4px 0; }
 .field.inline { flex-direction: row; align-items: center; gap: 8px; }
 .control { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 label, .label-text { font-weight: 600; font-size: 0.8rem; color: var(--muted); }
-input, select, button { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; min-height: 32px; }
+input, select, textarea, button { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; min-height: 32px; }
 input[type="text"], input[type="search"] { width: 100%; min-width: 6ch; flex: 1 1 8ch; }
 .field > input { flex: none; }
 select { max-width: 100%; }
@@ -173,6 +179,13 @@ button.tab[aria-selected="true"] { color: var(--text); font-weight: 700; border-
 .results-actions { display: flex; gap: 4px; }
 .results-body { flex: 1; min-height: 0; overflow: auto; }
 .tabpanel { padding: 6px 10px 10px; }
+
+/* ---- report tab ---- */
+.report-layout { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.report-controls textarea { width: 100%; resize: vertical; }
+.report-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.report-preview-box { min-width: 0; }
+iframe.report-preview { width: 100%; height: 340px; border: 1px solid var(--border); border-radius: 6px; background: #fff; display: block; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
 .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; min-width: 0; }
 .kpi-label { font-size: 0.72rem; color: var(--muted); font-weight: 600; }
@@ -249,7 +262,8 @@ pre { overflow: auto; background: var(--bg); border: 1px solid var(--border); pa
   .viewport { height: 72vh; min-height: 420px; }
   .results-panel, .results-panel.enlarged { height: auto; }
   .results-body { overflow: visible; }
-  .profile-layout { grid-template-columns: minmax(0, 1fr); }
+  .profile-layout, .report-layout { grid-template-columns: minmax(0, 1fr); }
+  iframe.report-preview { height: 60vh; }
   .overlay-right { width: min(260px, 52%); }
   .topbar { flex-wrap: wrap; }
   .mode-chip { display: none; }

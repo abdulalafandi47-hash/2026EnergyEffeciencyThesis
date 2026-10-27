@@ -10,10 +10,10 @@ The application models **one multilayer wall**: a stack of homogeneous layers wi
 
 | Area | Contents |
 |---|---|
-| Top bar | sidebar toggle (☰ Inputs), title, "Steady-state wall analysis" chip, data-policy note (click to read) |
+| Top bar | sidebar toggle (☰ Inputs), title, "Steady-state wall analysis" chip, **Save wall** / **Open wall…**, data-policy note (click to read) |
 | Sidebar (left, collapsible) | validity badge; 1 Wall dimensions; 2 Layers (material, thickness, reorder, remove, Inspect); 3 Boundary conditions and surface resistances |
 | Viewport (centre, about 74 % of the main column's height; the picture alone about 64 %) | toolbar ribbon, 3D picture with ground grid, layer list and inspector (fold-away overlay), colour bar, status bar |
-| Results panel (bottom, collapsible and enlargeable) | tabs: Results · Layers & temperatures · Temperature profile · Compare · Assumptions & references · Configuration; headline numbers always visible |
+| Results panel (bottom, collapsible and enlargeable) | tabs: Results · Layers & temperatures · Temperature profile · Compare · Assumptions & references · **Report** (Stage 7, see `docs/report-format.md`) · Configuration; headline numbers always visible |
 
 Hiding the sidebar gives the picture the full window width; collapsing the results panel gives it about 710 px of height at 900 px window height. On phones the 3D view comes first, then results, then the inputs; the toolbar scrolls sideways in one row and the layer list starts folded.
 
@@ -53,7 +53,8 @@ While the editor has errors, results, overlay and arrows keep showing the **last
 | `src/charts/` | dependency-free SVG charts | nothing |
 | `src/geometry/` | now also colour map, ground-grid spec, overlay type | nothing |
 | `src/viewer3d/` | now also thermal vertex-colour overlay, arrows, grid, pan/zoom | geometry, three |
-| `src/ui/` | `viewerPanel.ts` (viewport), `resultsPanel.ts` (tabs), `app.ts` (sidebar + shell) | editor, materials, geometry, analysis, charts; engine and viewer for types only |
+| `src/report/` (Stage 7) | builds the calculation report from existing results and writes HTML/Markdown/JSON/CSV; formats only, never calculates | itself; engine, editor and analysis for types only |
+| `src/ui/` | `viewerPanel.ts` (viewport), `resultsPanel.ts` (tabs, including Report), `app.ts` (sidebar + shell, Save/Open wall), `io.ts` (downloads, printing, clock; replaceable in tests) | editor, materials, geometry, analysis, charts, report; engine and viewer for types only |
 
 The calculation engine itself was **not changed**. `tests/architecture.test.ts` enforces these boundaries.
 

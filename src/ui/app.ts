@@ -20,6 +20,7 @@ import {
   FIELD,
   layerField,
   moveLayer,
+  parseDraft,
   removeLayer,
   setDimensionUnit,
   setDuration,
@@ -33,6 +34,7 @@ import {
   setSurfaceMode,
   setSurfaceOutside,
   setTemperatureUnit,
+  serializeDraft,
   setWidth,
   summarizeDataStatus,
   warningFor,
@@ -42,9 +44,12 @@ import { analyzeWall } from '../analysis';
 import { colorForCategory } from '../geometry';
 import { BUILT_IN_MATERIALS, MATERIAL_CATEGORIES, searchMaterials } from '../materials';
 import type { MaterialRecord } from '../materials';
+import { wallFileBase } from '../report';
 import type { ViewerFactory } from '../viewer3d';
 import { h, show } from './dom';
 import type { Child } from './dom';
+import { browserIo } from './io';
+import type { FileIo } from './io';
 import { createResultsPanel } from './resultsPanel';
 import type { ResultsPanel } from './resultsPanel';
 import { createViewerPanel } from './viewerPanel';
@@ -58,7 +63,12 @@ export interface WallEditorOptions {
    * Without it the editor works in text-only mode.
    */
   viewerFactory?: ViewerFactory;
+  /** Saving files, printing and the clock. Tests pass a replacement; the browser version is the default. */
+  io?: FileIo;
 }
+
+/** Result of opening a saved wall. */
+export type OpenWallOutcome = { ok: true; warnings: string[] } | { ok: false; error: string };
 
 export interface WallEditorHandle {
   /** The current draft (for tests and later stages). */
@@ -69,6 +79,8 @@ export interface WallEditorHandle {
   viewer: ViewerPanel;
   /** The results panel (tabs). */
   results: ResultsPanel;
+  /** Replaces the whole draft with the text of a saved wall file. Nothing changes if the file is refused. */
+  openWallText(text: string, filename?: string): OpenWallOutcome;
   /** Resolves once the 3D viewer has been created or found unavailable. */
   ready: Promise<void>;
   /** Releases the 3D viewer. */
@@ -101,6 +113,7 @@ export function mountWallEditor(
   materials: readonly MaterialRecord[] = BUILT_IN_MATERIALS,
   options: WallEditorOptions = {},
 ): WallEditorHandle {
+  const io = options.io ?? browserIo;
   let draft: WallDraft = createInitialDraft(materials);
   let materialFilter = '';
   let result: BuildResult = buildWall(draft, materials);
@@ -278,11 +291,15 @@ export function mountWallEditor(
     onSelectionChange: () => refreshSelectionUi(),
     announce: (text) => announce(text),
   });
-  const resultsPanel = createResultsPanel({ materials, announce: (text) => announce(text) });
+  const resultsPanel = createResultsPanel({ materials, announce: (text) => announce(text), io });
   resultsPanel.configurationHost.append(summary);
 
   // ---- workspace shell -------------------------------------------------------------------------------------
   const validity = h('p', { class: 'validity', 'data-role': 'validity' });
+  const fileMessage = h('p', { class: 'file-message', role: 'status', 'data-role': 'file-message' });
+  const saveButton = h('button', { type: 'button', class: 'tool', 'data-role': 'save-wall', title: 'Save this wall (inputs as typed) as a file' }, 'Save wall');
+  const openButton = h('button', { type: 'button', class: 'tool', 'data-role': 'open-wall', title: 'Open a wall file saved by this program' }, 'Open wall…');
+  const openInput = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'data-role': 'open-wall-input', 'aria-label': 'Wall file to open' });
   const sidebarToggle = h('button', { type: 'button', class: 'tool', 'aria-expanded': 'true', 'aria-controls': 'sidebar', 'data-role': 'sidebar-toggle' }, '☰ Inputs');
   const workspace = h(
     'div',
@@ -293,12 +310,13 @@ export function mountWallEditor(
       sidebarToggle,
       h('h1', {}, 'Wall Thermal Simulator'),
       h('span', { class: 'mode-chip' }, 'Steady-state wall analysis'),
+      h('span', { class: 'file-tools' }, saveButton, openButton, openInput),
       h('details', { class: 'policy', role: 'note' }, h('summary', {}, 'Data policy: illustrative values, not approved Cypriot design values'), h('p', {}, DATA_POLICY)),
     ),
     h(
       'div',
       { class: 'workspace-body' },
-      h('aside', { id: 'sidebar', class: 'sidebar', 'aria-label': 'Wall inputs' }, validity, dimensionsSection, layersSection, boundarySection),
+      h('aside', { id: 'sidebar', class: 'sidebar', 'aria-label': 'Wall inputs' }, validity, fileMessage, dimensionsSection, layersSection, boundarySection),
       h('main', { class: 'stage-column' }, viewerPanel.element, resultsPanel.element),
     ),
     status,
@@ -309,6 +327,51 @@ export function mountWallEditor(
     announce(collapsed ? 'Input sidebar hidden.' : 'Input sidebar shown.');
   });
   root.replaceChildren(workspace);
+
+  saveButton.addEventListener('click', () => {
+    const filename = `${wallFileBase(io.now())}.json`;
+    io.download(filename, 'application/json', serializeDraft(draft, materials) + '\n');
+    showFileMessage(`Saved ${filename} (see your browser's downloads).`, 'ok');
+    announce(`Wall saved as ${filename}.`);
+  });
+  openButton.addEventListener('click', () => openInput.click());
+  openInput.addEventListener('change', () => {
+    const file = openInput.files?.[0];
+    openInput.value = ''; // so the same file can be chosen again
+    if (!file) return;
+    if (file.size > 2_000_000) {
+      showFileMessage(`"${file.name}" is too large to be a wall file.`, 'bad');
+      return;
+    }
+    file.text().then(
+      (text) => void openWallText(text, file.name),
+      () => showFileMessage(`"${file.name}" could not be read.`, 'bad'),
+    );
+  });
+
+  function showFileMessage(text: string, kind: 'ok' | 'bad' | 'warn'): void {
+    fileMessage.textContent = text;
+    fileMessage.className = `file-message ${kind}`;
+  }
+
+  function openWallText(text: string, filename = 'the file'): OpenWallOutcome {
+    const parsed = parseDraft(text, materials);
+    if (!parsed.ok) {
+      showFileMessage(`Could not open ${filename}: ${parsed.error} The current wall was not changed.`, 'bad');
+      announce(`Could not open ${filename}. The current wall was not changed.`);
+      return parsed;
+    }
+    draft = parsed.draft;
+    syncStaticInputs();
+    renderLayers();
+    refresh();
+    showFileMessage(
+      parsed.warnings.length > 0 ? `Opened ${filename} with ${parsed.warnings.length} warning${parsed.warnings.length === 1 ? '' : 's'}: ${parsed.warnings.join(' ')}` : `Opened ${filename}.`,
+      parsed.warnings.length > 0 ? 'warn' : 'ok',
+    );
+    announce(`Opened ${filename}.`);
+    return { ok: true, warnings: parsed.warnings };
+  }
 
   // ---- rendering ------------------------------------------------------------------------------------
 
@@ -561,7 +624,7 @@ export function mountWallEditor(
         : null,
       !result.ok,
     );
-    resultsPanel.setState(result.wall && analysis ? { wall: result.wall, views, analysis } : null, !result.ok);
+    resultsPanel.setState(result.wall && analysis ? { wall: result.wall, views, analysis, draft, editorWarnings: result.warnings.map((w) => w.message) } : null, !result.ok);
     refreshSelectionUi();
   }
 
@@ -650,6 +713,7 @@ export function mountWallEditor(
     getResult: () => result,
     viewer: viewerPanel,
     results: resultsPanel,
+    openWallText,
     ready: viewerPanel.ready,
     destroy: () => viewerPanel.destroy(),
   };
