@@ -38,16 +38,36 @@ import {
   warningFor,
 } from '../editor';
 import type { BuildResult, LayerView, LengthUnit, SurfaceMode, TemperatureUnit, WallDraft } from '../editor';
+import { colorForCategory } from '../geometry';
 import { BUILT_IN_MATERIALS, MATERIAL_CATEGORIES, searchMaterials } from '../materials';
 import type { MaterialRecord } from '../materials';
+import type { ViewerFactory } from '../viewer3d';
 import { h, show } from './dom';
 import type { Child } from './dom';
+import { createViewerPanel } from './viewerPanel';
+import type { ViewerPanel } from './viewerPanel';
+import { wallSpecFromViews } from './wallSpec';
+
+export interface WallEditorOptions {
+  /**
+   * Creates the 3D viewer. Passed in (instead of imported here) so the 3D
+   * library is only loaded in the browser, and so tests can use a fake viewer.
+   * Without it the editor works in text-only mode.
+   */
+  viewerFactory?: ViewerFactory;
+}
 
 export interface WallEditorHandle {
   /** The current draft (for tests and later stages). */
   getDraft(): WallDraft;
   /** The current result of validating the draft. */
   getResult(): BuildResult;
+  /** The 3D panel (layout, selection). */
+  viewer: ViewerPanel;
+  /** Resolves once the 3D viewer has been created or found unavailable. */
+  ready: Promise<void>;
+  /** Releases the 3D viewer. */
+  destroy(): void;
 }
 
 const DATA_POLICY =
@@ -71,7 +91,11 @@ const STATUS_TEXT: Record<string, string> = {
 
 const fieldDomId = (field: string): string => `f-${field.replace(/[^a-zA-Z0-9]+/g, '-')}`;
 
-export function mountWallEditor(root: HTMLElement, materials: readonly MaterialRecord[] = BUILT_IN_MATERIALS): WallEditorHandle {
+export function mountWallEditor(
+  root: HTMLElement,
+  materials: readonly MaterialRecord[] = BUILT_IN_MATERIALS,
+  options: WallEditorOptions = {},
+): WallEditorHandle {
   let draft: WallDraft = createInitialDraft(materials);
   let materialFilter = '';
   let result: BuildResult = buildWall(draft, materials);
@@ -220,7 +244,7 @@ export function mountWallEditor(root: HTMLElement, materials: readonly MaterialR
     refresh();
     announce('Wall reset to the example configuration.');
   });
-  const status = h('div', { class: 'visually-hidden', role: 'status', 'aria-live': 'polite' });
+  const status = h('div', { id: 'announcer', class: 'visually-hidden', role: 'status', 'aria-live': 'polite' });
 
   const layersSection = h(
     'section',
@@ -243,6 +267,13 @@ export function mountWallEditor(root: HTMLElement, materials: readonly MaterialR
 
   const summary = h('section', { id: 'summary', 'aria-labelledby': 'h-summary', 'aria-live': 'polite' });
 
+  // ---- 3D panel ------------------------------------------------------------------------------------------
+  const viewerPanel = createViewerPanel({
+    ...(options.viewerFactory ? { viewerFactory: options.viewerFactory } : {}),
+    onSelectionChange: () => refreshSelectionUi(),
+    announce: (text) => announce(text),
+  });
+
   // ---- page skeleton -----------------------------------------------------------------------------
 
   root.replaceChildren(
@@ -250,10 +281,15 @@ export function mountWallEditor(root: HTMLElement, materials: readonly MaterialR
       'header',
       { class: 'page-header' },
       h('h1', {}, 'Wall Thermal Simulator'),
-      h('p', { class: 'subtitle' }, 'Multilayer wall editor — Stage 4. Calculation results and 3D view come in later stages.'),
+      h('p', { class: 'subtitle' }, 'Multilayer wall editor with a 3D view — Stage 5. Calculation results, temperature profiles and reports come in later stages.'),
       h('p', { class: 'policy', role: 'note' }, DATA_POLICY),
     ),
-    h('main', { class: 'layout' }, h('div', { class: 'editor' }, dimensionsSection, layersSection, boundarySection), summary),
+    h(
+      'main',
+      { class: 'layout' },
+      h('div', { class: 'editor' }, dimensionsSection, layersSection, boundarySection, summary),
+      h('aside', { class: 'viewer-column', 'aria-label': '3D view' }, viewerPanel.element),
+    ),
     status,
   );
 
@@ -333,6 +369,7 @@ export function mountWallEditor(root: HTMLElement, materials: readonly MaterialR
       layersList.append(h('li', { class: 'empty' }, 'No layers yet. Use "Add layer" to start building the wall.'));
     }
     if (focusId) focusById(focusId);
+    refreshSelectionUi();
   }
 
   function renderLayer(view: LayerView, count: number): HTMLElement {
@@ -366,6 +403,14 @@ export function mountWallEditor(root: HTMLElement, materials: readonly MaterialR
       focusById(focusId, fallbackId);
     };
 
+    const inspect = h('button', { type: 'button', 'aria-label': `Inspect layer ${position} in the 3D view`, 'aria-pressed': 'false', 'data-focus-id': `${key}:inspect`, 'data-role': 'inspect' }, 'Inspect');
+    inspect.addEventListener('click', () => {
+      if (!viewerPanel.hasLayer(key)) {
+        announce(`Layer ${position} is not drawn yet. Choose a material and enter a valid thickness first.`);
+        return;
+      }
+      viewerPanel.select(viewerPanel.getSelected() === key ? null : key);
+    });
     const faceTags = view.faces.map((f) => h('span', { class: `tag tag-${f}` }, f === 'interior' ? 'Interior face' : 'Exterior face'));
     const name = view.material?.name ?? 'No material selected';
 
@@ -375,12 +420,14 @@ export function mountWallEditor(root: HTMLElement, materials: readonly MaterialR
       h(
         'div',
         { class: 'layer-head' },
+        view.material ? h('span', { class: 'swatch', style: `background:${colorForCategory(view.material.category)}`, 'aria-hidden': 'true' }) : null,
         h('span', { class: 'pos' }, `Layer ${position}`),
         ...faceTags,
         h('span', { class: 'layer-name' }, name),
         h(
           'span',
           { class: 'layer-buttons' },
+          inspect,
           button('↑', `Move layer ${position} toward the interior`, `${key}:up`, position === 1, () => move('toward-interior', `${key}:up`, `${key}:down`)),
           button('↓', `Move layer ${position} toward the exterior`, `${key}:down`, position === count, () => move('toward-exterior', `${key}:down`, `${key}:up`)),
           button('Remove', `Remove layer ${position}`, `${key}:remove`, false, () => {
@@ -435,6 +482,16 @@ export function mountWallEditor(root: HTMLElement, materials: readonly MaterialR
     );
   }
 
+  /** Marks the selected layer's card and Inspect button (selection lives in the 3D panel). */
+  function refreshSelectionUi(): void {
+    const selected = viewerPanel.getSelected();
+    for (const card of layersList.querySelectorAll<HTMLElement>('li.layer')) {
+      const isSelected = card.dataset.key === selected;
+      card.classList.toggle('selected', isSelected);
+      card.querySelector('[data-role="inspect"]')?.setAttribute('aria-pressed', String(isSelected));
+    }
+  }
+
   /** Re-validates the draft and updates every message, readout and the summary. */
   function refresh(): void {
     result = buildWall(draft, materials);
@@ -470,6 +527,10 @@ export function mountWallEditor(root: HTMLElement, materials: readonly MaterialR
       : 'Wall area: — (enter valid width and height)';
 
     renderSummary(views);
+
+    // The 3D view is drawn only from a VALID wall; with errors it keeps the last valid one.
+    viewerPanel.setWall(result.wall ? { spec: wallSpecFromViews(result.wall, views), views } : null, !result.ok);
+    refreshSelectionUi();
   }
 
   function renderSummary(views: LayerView[]): void {
@@ -555,5 +616,8 @@ export function mountWallEditor(root: HTMLElement, materials: readonly MaterialR
   return {
     getDraft: () => draft,
     getResult: () => result,
+    viewer: viewerPanel,
+    ready: viewerPanel.ready,
+    destroy: () => viewerPanel.destroy(),
   };
 }

@@ -32,6 +32,7 @@ function imports(file: string): Array<{ from: string; typeOnly: boolean }> {
     found.push({ from: match[2] ?? '', typeOnly: Boolean(match[1]) });
   }
   for (const match of text.matchAll(/import\s+'([^']+)'/g)) found.push({ from: match[1] ?? '', typeOnly: false });
+  for (const match of text.matchAll(/import\(\s*'([^']+)'\s*\)/g)) found.push({ from: match[1] ?? '', typeOnly: false }); // dynamic import()
   return found;
 }
 
@@ -46,12 +47,18 @@ function targetModule(file: string, specifier: string): string | null {
   return parts[0] ?? null;
 }
 
-const RULES: Record<string, { allowed: string[]; typeOnlyAllowed?: string[] }> = {
+const RULES: Record<string, { allowed: string[]; typeOnlyAllowed?: string[]; fileExceptions?: Record<string, string[]> }> = {
   engine: { allowed: ['engine'] },
   units: { allowed: ['units', 'engine'] },
   materials: { allowed: ['materials', 'engine'] },
+  // Pure drawing arithmetic: no 3D library, no editor, no screen code.
+  geometry: { allowed: ['geometry'], typeOnlyAllowed: ['engine'] },
+  // The 3D library lives here and nowhere else. It knows only the geometry.
+  viewer3d: { allowed: ['viewer3d', 'geometry'] },
   editor: { allowed: ['editor', 'engine', 'materials', 'units'] },
-  ui: { allowed: ['ui', 'editor', 'materials'], typeOnlyAllowed: ['engine'] },
+  // The screen shows what the editor and geometry produce. It may import the engine and the viewer only for TYPES,
+  // except the entry file, which loads the viewer on demand.
+  ui: { allowed: ['ui', 'editor', 'materials', 'geometry'], typeOnlyAllowed: ['engine', 'viewer3d'], fileExceptions: { 'ui/main.ts': ['viewer3d'] } },
 };
 
 describe('module boundaries', () => {
@@ -62,7 +69,10 @@ describe('module boundaries', () => {
         for (const { from, typeOnly } of imports(file)) {
           const target = targetModule(file, from);
           if (target === null) continue; // packages and CSS side-effect files are not module boundaries
-          const ok = rule.allowed.includes(target) || (typeOnly && (rule.typeOnlyAllowed ?? []).includes(target));
+          const ok =
+            rule.allowed.includes(target) ||
+            (typeOnly && (rule.typeOnlyAllowed ?? []).includes(target)) ||
+            (rule.fileExceptions?.[file] ?? []).includes(target);
           if (!ok) violations.push(`${file} imports ${typeOnly ? 'type ' : ''}'${from}'`);
         }
       }
@@ -80,7 +90,7 @@ describe('module boundaries', () => {
 });
 
 describe('no screen code outside src/ui', () => {
-  for (const module of ['engine', 'units', 'materials', 'editor']) {
+  for (const module of ['engine', 'units', 'materials', 'editor', 'geometry']) {
     it(`${module}/ does not touch the DOM, window or document`, () => {
       const offenders = sourceFiles(module).filter((file) => /\b(document|window|localStorage|HTMLElement)\b/.test(codeOf(file)));
       expect(offenders).toEqual([]);
@@ -91,5 +101,18 @@ describe('no screen code outside src/ui', () => {
     for (const file of sourceFiles('ui')) {
       expect(codeOf(file), file).not.toMatch(/lambda\w*\s*[/*]|thickness\w*\s*\/\s*\w*lambda/i);
     }
+  });
+});
+
+describe('the 3D library is confined to src/viewer3d', () => {
+  it('no other module imports "three"', () => {
+    const offenders = Object.keys(SOURCES).filter((file) => !file.startsWith('viewer3d/') && imports(file).some((i) => i.from === 'three' || i.from.startsWith('three/')));
+    expect(offenders).toEqual([]);
+  });
+  it('viewer3d does import it (guards against a silently empty check)', () => {
+    expect(sourceFiles('viewer3d').some((file) => imports(file).some((i) => i.from === 'three'))).toBe(true);
+  });
+  it('the dynamic import in ui/main.ts is detected by the checker', () => {
+    expect(imports('ui/main.ts').some((i) => i.from === '../viewer3d' && !i.typeOnly)).toBe(true);
   });
 });

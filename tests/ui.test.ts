@@ -220,7 +220,7 @@ describe('adding, removing and reordering layers', () => {
     click(buttonByLabel('Move layer 3 toward the interior'));
     expect(tableMaterials().map((t) => t.split(' (')[0])).toEqual(['Gypsum plaster', 'Expanded polystyrene', 'Clay brick, solid', 'Cement plaster / render']);
     expect(engineJson().layers.map((l) => l.thicknessM)).toEqual([0.015, 0.08, 0.2, 0.02]);
-    expect(root.querySelector('[role="status"]')?.textContent).toBe('Layer moved to position 2 of 4.');
+    expect(document.getElementById('announcer')?.textContent).toBe('Layer moved to position 2 of 4.');
   });
 
   it('keeps keyboard focus on the moved layer\'s button', () => {
