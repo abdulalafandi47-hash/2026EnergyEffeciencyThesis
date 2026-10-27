@@ -58,6 +58,13 @@ export function validateWallInput(input: unknown): ValidationIssue[] {
       add(
         numberIssue(layer.lambdaWPerMK, `${path}.lambdaWPerMK`, `${label} thermal conductivity (W/(m·K))`, 'positive'),
       );
+      if (layer.propertyStatus !== undefined && !STATUSES.includes(layer.propertyStatus)) {
+        issues.push({
+          code: 'invalid-option',
+          path: `${path}.propertyStatus`,
+          message: `${label} property status must be "verified", "unverified", "illustrative" or "user-defined".`,
+        });
+      }
       // Optional properties: absent is fine, present-but-invalid is an error.
       if (layer.densityKgPerM3 !== undefined && layer.densityKgPerM3 !== null) {
         add(numberIssue(layer.densityKgPerM3, `${path}.densityKgPerM3`, `${label} density (kg/m³)`, 'positive'));

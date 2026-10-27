@@ -38,8 +38,22 @@ A Canadian RSI table found in the same search lists *different* air-film values 
 - [ ] Whether other assessment methods (for example surface-condensation or mould-risk checks) prescribe different internal surface resistances, and which standard governs them. The engine comments say they can differ; that statement is from general knowledge and is **not yet verified**.
 - [ ] Which edition is the current CEN adoption (a DIN catalogue listing seen in search mentions EN ISO 6946:2017 with a 2021 correction; unverified).
 
-## 3. Other references to add
+## 3. Material data (Stage 3)
 
-- Material properties: none used yet. Stage 3 must cite the exact table, clause or datasheet for every value marked `verified`.
+**Currently no material value is verified.** All nine built-in records are `illustrative` (see `docs/material-database.md`). Searches on 2026-10-27 for an openly available primary source of design values found none that could be read in this environment.
+
+Leads to follow up (found by search; **none has been read or checked, so none supports any value yet**):
+
+| Lead | Why it might help | Obstacle |
+|---|---|---|
+| SEAI DEAP guide, "thermal conductivity" table: <https://deapguide.seai.ie/fabric/heat-loss-u-value/thermal-conductivity> | Free table of default conductivities (Irish, for use where certified data is unavailable). Not Cyprus-specific and not stated to equal EN ISO 10456. | Host blocked by this environment's network policy; open it yourself and check the exact wording, edition and conditions. |
+| HTI (Cyprus) diploma project on the effect of temperature and moisture on thermal conductivity of building materials: <https://athena.cut.ac.cy/s/hti/item/235994> | Measured data on materials used in Cyprus. | A student project, not a standard; check its method, conditions and status before relying on it. |
+| Brunel University study on Cypriot building simulation (hollow brick, mud-and-straw block measured): <https://bura.brunel.ac.uk/handle/2438/7881> | Local material measurements. | Not read; check applicability. |
+| EN ISO 10456:2007 + AC:2009 | Tabulated design values and conversion procedures. | Paywalled; a catalogue listing suggested an ISO working draft to replace the 2007 edition (study initiated April 2026). Check the current edition before citing. |
+| Cyprus energy-performance regulations (KENAK) technical guidance | Likely the official source of default material properties for Cyprus. | A search did not find the table. Ask your supervisor or the Department of Electrical and Mechanical Services which document applies. |
+
+## 4. Other references to add
+
+- Material properties: see section 3. Every value marked `verified` must cite the exact table, clause or datasheet.
 - Climate data for Cyprus: not used yet (no weather-driven calculation in this version).
 - Peer-reviewed building-physics literature: to be added when the thesis text needs it. Do not cite a paper that has not been read.

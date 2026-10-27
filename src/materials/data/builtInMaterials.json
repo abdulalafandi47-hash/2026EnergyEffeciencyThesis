@@ -1,0 +1,167 @@
+[
+  {
+    "id": "concrete-normal-weight",
+    "name": "Concrete, normal weight (demonstration)",
+    "category": "Concrete",
+    "lambdaWPerMK": 1.7,
+    "densityKgPerM3": 2300,
+    "specificHeatJPerKgK": 1000,
+    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "status": "illustrative",
+    "source": {
+      "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
+    },
+    "conditions": "Not specified: moisture content, mean temperature and mix are undefined.",
+    "assumptionsAndLimitations": [
+      "Demonstration value only; not for design, compliance or thesis conclusions.",
+      "Conductivity of concrete varies strongly with density, aggregate, moisture content and temperature.",
+      "Reinforcement is not represented."
+    ]
+  },
+  {
+    "id": "cement-plaster",
+    "name": "Cement plaster / render (demonstration)",
+    "category": "Cement plaster",
+    "lambdaWPerMK": 1.0,
+    "densityKgPerM3": 1800,
+    "specificHeatJPerKgK": 1000,
+    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "status": "illustrative",
+    "source": {
+      "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
+    },
+    "conditions": "Not specified: moisture content, mean temperature and mix are undefined.",
+    "assumptionsAndLimitations": [
+      "Demonstration value only; not for design, compliance or thesis conclusions.",
+      "Conductivity varies with density, cement/sand ratio, moisture content and temperature."
+    ]
+  },
+  {
+    "id": "gypsum-plaster",
+    "name": "Gypsum plaster (demonstration)",
+    "category": "Gypsum plaster",
+    "lambdaWPerMK": 0.43,
+    "densityKgPerM3": 1200,
+    "specificHeatJPerKgK": 1000,
+    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "status": "illustrative",
+    "source": {
+      "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
+    },
+    "conditions": "Not specified: moisture content, mean temperature and product are undefined.",
+    "assumptionsAndLimitations": [
+      "Demonstration value only; not for design, compliance or thesis conclusions.",
+      "Conductivity varies with density (lightweight and standard gypsum plasters differ), moisture content and temperature."
+    ]
+  },
+  {
+    "id": "clay-brick-solid",
+    "name": "Clay brick, solid (demonstration)",
+    "category": "Clay brick",
+    "lambdaWPerMK": 0.7,
+    "densityKgPerM3": 1800,
+    "specificHeatJPerKgK": 900,
+    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "status": "illustrative",
+    "source": {
+      "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
+    },
+    "conditions": "Not specified: moisture content, mean temperature and brick type are undefined.",
+    "assumptionsAndLimitations": [
+      "Demonstration value only; not for design, compliance or thesis conclusions.",
+      "Represents a solid, homogeneous brick. Perforated or hollow bricks and mortar joints (a thermal bridge) are not represented.",
+      "Conductivity varies with density, firing, moisture content and temperature."
+    ]
+  },
+  {
+    "id": "concrete-block-medium",
+    "name": "Concrete block, medium density (demonstration)",
+    "category": "Concrete block",
+    "lambdaWPerMK": 0.9,
+    "densityKgPerM3": 1600,
+    "specificHeatJPerKgK": 1000,
+    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "status": "illustrative",
+    "source": {
+      "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
+    },
+    "conditions": "Not specified: moisture content, mean temperature, block type and void content are undefined.",
+    "assumptionsAndLimitations": [
+      "Demonstration value only; not for design, compliance or thesis conclusions.",
+      "Treated as a homogeneous layer. Hollow cores and mortar joints are not represented; real hollow blocks need an equivalent value from test data or a standard.",
+      "Conductivity varies with density, aggregate, moisture content and temperature."
+    ]
+  },
+  {
+    "id": "eps-slab",
+    "name": "Expanded polystyrene (EPS) slab (demonstration)",
+    "category": "EPS",
+    "lambdaWPerMK": 0.035,
+    "densityKgPerM3": 25,
+    "specificHeatJPerKgK": 1450,
+    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "status": "illustrative",
+    "source": {
+      "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
+    },
+    "conditions": "Not specified: product grade, moisture content and mean temperature are undefined.",
+    "assumptionsAndLimitations": [
+      "Demonstration value only; use the manufacturer's declared value for any real product.",
+      "Conductivity depends on product grade, density, moisture content, temperature and ageing."
+    ]
+  },
+  {
+    "id": "xps-board",
+    "name": "Extruded polystyrene (XPS) board (demonstration)",
+    "category": "XPS",
+    "lambdaWPerMK": 0.034,
+    "densityKgPerM3": 35,
+    "specificHeatJPerKgK": 1450,
+    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "status": "illustrative",
+    "source": {
+      "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
+    },
+    "conditions": "Not specified: product grade, moisture content and mean temperature are undefined.",
+    "assumptionsAndLimitations": [
+      "Demonstration value only; use the manufacturer's declared value for any real product.",
+      "Conductivity depends on product grade, blowing agent, density, moisture content, temperature and ageing."
+    ]
+  },
+  {
+    "id": "mineral-wool-slab",
+    "name": "Mineral wool slab (demonstration)",
+    "category": "Mineral wool",
+    "lambdaWPerMK": 0.037,
+    "densityKgPerM3": 40,
+    "specificHeatJPerKgK": 1030,
+    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "status": "illustrative",
+    "source": {
+      "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
+    },
+    "conditions": "Not specified: product type, moisture content and mean temperature are undefined.",
+    "assumptionsAndLimitations": [
+      "Demonstration value only; use the manufacturer's declared value for any real product.",
+      "Conductivity depends on density, fibre type, moisture content (mineral wool is moisture-sensitive) and temperature."
+    ]
+  },
+  {
+    "id": "polyurethane-board",
+    "name": "Polyurethane (PUR/PIR) board (demonstration)",
+    "category": "Polyurethane",
+    "lambdaWPerMK": 0.025,
+    "densityKgPerM3": 35,
+    "specificHeatJPerKgK": 1400,
+    "units": { "conductivity": "W/(m·K)", "density": "kg/m³", "specificHeat": "J/(kg·K)" },
+    "status": "illustrative",
+    "source": {
+      "citation": "None. Representative order-of-magnitude value chosen by the developer for demonstration; not taken from a standard, datasheet or paper."
+    },
+    "conditions": "Not specified: product type, facing, moisture content and mean temperature are undefined.",
+    "assumptionsAndLimitations": [
+      "Demonstration value only; use the manufacturer's declared value for any real product.",
+      "Conductivity depends on product type, facings, thickness, blowing agent, temperature and ageing."
+    ]
+  }
+]

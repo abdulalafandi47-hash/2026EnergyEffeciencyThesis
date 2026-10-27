@@ -69,3 +69,4 @@ Physical relationships that must hold for any correct calculation, checked on na
 | 2026-10-27 | Mutation check: 14 deliberate bugs injected one at a time (wrong formula, dropped term, sign error, wrong unit factor, accepting zero thickness, …) | All 14 detected by the test suite |
 | — | Comparison with measured data or certified software | **Not done.** Needed before any claim of physical validation. |
 | — | Check of surface-resistance presets and method against ISO 6946:2017 text | **Not done.** See `docs/sources.md`. |
+| 2026-10-27 | Stage 3: 385 automated tests in total (material integrity, validation rules, search, export, custom materials, database→engine); 14 further deliberate bugs injected in the material code | All tests pass; all 14 bugs detected |
