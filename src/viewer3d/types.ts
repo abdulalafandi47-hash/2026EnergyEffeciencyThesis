@@ -1,4 +1,4 @@
-import type { WallLayout } from '../geometry';
+import type { FlowDirection, ThermalOverlay, WallLayout } from '../geometry';
 
 /** Named camera positions. Directions are relative to the wall (x runs interior → exterior). */
 export type ViewPreset =
@@ -28,8 +28,19 @@ export interface WallViewer {
   select(layerId: string | null): void;
   setLabelsVisible(visible: boolean): void;
   setView(preset: ViewPreset): void;
+  /** Paints calculated temperatures on the layers; null removes the paint. */
+  setThermalOverlay(overlay: ThermalOverlay | null): void;
+  /** Shows arrows for the direction of heat flow; null or 'none' hides them. */
+  setHeatFlow(direction: FlowDirection | null): void;
+  setGridVisible(visible: boolean): void;
+  /** What a left-drag does: rotate the model (default) or pan the view. */
+  setNavigationMode(mode: NavigationMode): void;
+  /** Moves the camera closer (factor < 1) or farther (factor > 1). */
+  zoom(factor: number): void;
   destroy(): void;
 }
+
+export type NavigationMode = 'orbit' | 'pan';
 
 /**
  * Creates a viewer inside `container`, or resolves to null if 3D graphics

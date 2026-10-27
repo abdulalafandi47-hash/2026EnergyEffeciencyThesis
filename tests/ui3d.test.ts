@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { layerField } from '../src/editor';
 import type { WallLayout } from '../src/geometry';
 import { BUILT_IN_MATERIALS } from '../src/materials';
-import type { ViewerFactory, ViewerHandlers, ViewPreset, WallViewer } from '../src/viewer3d';
+import type { ViewerFactory, WallViewer } from '../src/viewer3d';
 import { mountWallEditor } from '../src/ui/app';
 import type { WallEditorHandle } from '../src/ui/app';
 import { createViewerPanel } from '../src/ui/viewerPanel';
@@ -16,39 +16,7 @@ import { wallSpecFromViews } from '../src/ui/wallSpec';
 import { describeLayers } from '../src/editor';
 import { createInitialDraft, buildWall } from '../src/editor';
 import { at, expectClose } from './helpers/helpers';
-
-interface FakeViewer extends WallViewer {
-  layouts: WallLayout[];
-  selections: Array<string | null>;
-  labels: boolean[];
-  views: ViewPreset[];
-  destroyed: number;
-  handlers: ViewerHandlers;
-}
-
-function makeFake(): { factory: ViewerFactory; viewer: () => FakeViewer; containers: HTMLElement[] } {
-  let created: FakeViewer | null = null;
-  const containers: HTMLElement[] = [];
-  const factory: ViewerFactory = async (container, handlers) => {
-    containers.push(container);
-    const fake: FakeViewer = {
-      layouts: [],
-      selections: [],
-      labels: [],
-      views: [],
-      destroyed: 0,
-      handlers,
-      update: (layout) => void fake.layouts.push(layout),
-      select: (id) => void fake.selections.push(id),
-      setLabelsVisible: (v) => void fake.labels.push(v),
-      setView: (p) => void fake.views.push(p),
-      destroy: () => void fake.destroyed++,
-    };
-    created = fake;
-    return fake;
-  };
-  return { factory, viewer: () => created as FakeViewer, containers };
-}
+import { makeFake } from './helpers/ui';
 
 let root: HTMLElement;
 let editor: WallEditorHandle;

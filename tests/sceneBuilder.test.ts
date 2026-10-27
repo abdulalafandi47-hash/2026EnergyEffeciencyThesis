@@ -5,10 +5,14 @@
  */
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { layoutWall } from '../src/geometry';
-import type { LayerSpec, WallLayout, WallSpec } from '../src/geometry';
+import { gridSpec, layoutWall, temperatureFraction, thermalCss } from '../src/geometry';
+import type { LayerSpec, ThermalOverlay, WallLayout, WallSpec } from '../src/geometry';
 import {
+  applyThermalOverlay,
+  buildGround,
   createWallScene,
+  THERMAL_SLICES,
+  syncHeatFlow,
   DIMMED_OPACITY,
   disposeWallScene,
   EDGE_COLOR,
@@ -32,7 +36,7 @@ const meshOf = (scene: ReturnType<typeof createWallScene>, id: string): THREE.Me
   if (!m) throw new Error(`no mesh ${id}`);
   return m;
 };
-const materialOf = (m: THREE.Mesh) => m.material as THREE.MeshStandardMaterial;
+const materialOf = (m: THREE.Mesh) => (m.userData as { standardMaterial: THREE.MeshStandardMaterial }).standardMaterial;
 const edgesOf = (m: THREE.Mesh) => m.children.find((c): c is THREE.LineSegments => c instanceof THREE.LineSegments) as THREE.LineSegments;
 const sizeOf = (m: THREE.Mesh): THREE.Vector3 => new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3());
 const centerOf = (m: THREE.Mesh): THREE.Vector3 => new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3());
@@ -302,5 +306,280 @@ describe('disposeWallScene', () => {
     s.layers.splice(1, 1);
     syncWallScene(scene, layoutOf(s), true);
     expect(freed).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Thermal overlay: calculated temperatures painted on the layers
+// ---------------------------------------------------------------------------
+describe('thermal overlay', () => {
+  // Case-A-like temperatures (°C): the insulation 'c' takes most of the drop.
+  const overlay = (): ThermalOverlay => ({
+    minC: 5,
+    maxC: 20,
+    direction: 'outward',
+    layers: [
+      { id: 'a', startC: 19.2, endC: 19.0 },
+      { id: 'b', startC: 19.0, endC: 17.8 },
+      { id: 'c', startC: 17.8, endC: 5.4 },
+      { id: 'd', startC: 5.4, endC: 5.2 },
+    ],
+  });
+  const build = () => {
+    const scene = createWallScene();
+    syncWallScene(scene, layoutOf(spec()), true);
+    return scene;
+  };
+  const colourAt = (mesh: THREE.Mesh, vertex: number): string => {
+    const attr = mesh.geometry.getAttribute('color');
+    return '#' + new THREE.Color(attr.getX(vertex), attr.getY(vertex), attr.getZ(vertex)).getHexString(THREE.SRGBColorSpace);
+  };
+  /** Vertex indices of a thermal box grouped by their x position (−0.5 … +0.5). */
+  const verticesAtX = (mesh: THREE.Mesh, x: number): number[] => {
+    const pos = mesh.geometry.getAttribute('position');
+    return Array.from({ length: pos.count }, (_, i) => i).filter((i) => Math.abs(pos.getX(i) - x) < 1e-9);
+  };
+
+  it('paints each layer with vertex colours and an UNLIT material, so on-screen colours equal the colour bar', () => {
+    const scene = build();
+    applyThermalOverlay(scene, overlay());
+    for (const mesh of scene.meshes.values()) {
+      expect(mesh.material).toBeInstanceOf(THREE.MeshBasicMaterial);
+      expect((mesh.material as THREE.MeshBasicMaterial).vertexColors).toBe(true);
+      expect(mesh.geometry.getAttribute('color')).toBeDefined();
+    }
+  });
+
+  it('the interior-side face gets the colour of the start temperature and the exterior-side face that of the end temperature', () => {
+    const scene = build();
+    const o = overlay();
+    applyThermalOverlay(scene, o);
+    for (const entry of o.layers) {
+      const mesh = meshOf(scene, entry.id);
+      const startHex = thermalCss(temperatureFraction(entry.startC, o.minC, o.maxC));
+      const endHex = thermalCss(temperatureFraction(entry.endC, o.minC, o.maxC));
+      for (const v of verticesAtX(mesh, -0.5)) expect(colourAt(mesh, v)).toBe(startHex);
+      for (const v of verticesAtX(mesh, 0.5)) expect(colourAt(mesh, v)).toBe(endHex);
+    }
+  });
+
+  it('inside a layer the temperature (and so the colour) follows the straight line between its two faces', () => {
+    const scene = build();
+    const o = overlay();
+    applyThermalOverlay(scene, o);
+    const mesh = meshOf(scene, 'c'); // 17.8 → 5.4 °C
+    const entry = at(o.layers, 2);
+    for (let slice = 0; slice <= THERMAL_SLICES; slice++) {
+      const along = slice / THERMAL_SLICES;
+      const expectedHex = thermalCss(temperatureFraction(entry.startC + (entry.endC - entry.startC) * along, o.minC, o.maxC));
+      for (const v of verticesAtX(mesh, along - 0.5)) expect(colourAt(mesh, v)).toBe(expectedHex);
+    }
+  });
+
+  it('warmer side is warmer in colour: the interior face of the insulation is redder than its exterior face', () => {
+    const scene = build();
+    applyThermalOverlay(scene, overlay());
+    const mesh = meshOf(scene, 'c');
+    const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const warm = rgb(colourAt(mesh, at(verticesAtX(mesh, -0.5), 0)));
+    const cold = rgb(colourAt(mesh, at(verticesAtX(mesh, 0.5), 0)));
+    expect((warm[0] as number) - (warm[2] as number)).toBeGreaterThan((cold[0] as number) - (cold[2] as number));
+  });
+
+  it('works for heat gain: when outside is warmer, the exterior face is the warm colour', () => {
+    const scene = build();
+    const o: ThermalOverlay = { minC: 24, maxC: 35, direction: 'inward', layers: [{ id: 'a', startC: 24.6, endC: 24.7 }, { id: 'b', startC: 24.7, endC: 25.6 }, { id: 'c', startC: 25.6, endC: 34.7 }, { id: 'd', startC: 34.7, endC: 34.8 }] };
+    applyThermalOverlay(scene, o);
+    const mesh = meshOf(scene, 'c');
+    expect(colourAt(mesh, at(verticesAtX(mesh, 0.5), 0))).toBe(thermalCss(temperatureFraction(34.7, 24, 35)));
+  });
+
+  it('the box geometry is unchanged in size: only the colours are added', () => {
+    const scene = build();
+    applyThermalOverlay(scene, overlay());
+    scene.group.updateMatrixWorld(true);
+    const layout = layoutOf(spec());
+    for (const box of layout.layers) expectClose(sizeOf(meshOf(scene, box.id)).x, box.sizeX, 1e-12);
+  });
+
+  it('removing the overlay restores the normal category-coloured boxes', () => {
+    const scene = build();
+    applyThermalOverlay(scene, overlay());
+    applyThermalOverlay(scene, null);
+    for (const mesh of scene.meshes.values()) {
+      expect(mesh.geometry).toBe(scene.cube);
+      expect(mesh.material).toBeInstanceOf(THREE.MeshStandardMaterial);
+    }
+  });
+
+  it('layers missing from the overlay keep their normal look', () => {
+    const scene = build();
+    const o = overlay();
+    o.layers = o.layers.filter((l) => l.id !== 'b');
+    applyThermalOverlay(scene, o);
+    expect(meshOf(scene, 'b').material).toBeInstanceOf(THREE.MeshStandardMaterial);
+    expect(meshOf(scene, 'a').material).toBeInstanceOf(THREE.MeshBasicMaterial);
+  });
+
+  it('selection highlighting works on the painted boxes and survives turning the paint on and off', () => {
+    const scene = build();
+    setSelection(scene, 'b');
+    applyThermalOverlay(scene, overlay());
+    expect((meshOf(scene, 'b').material as THREE.MeshBasicMaterial).opacity).toBe(1);
+    expect((meshOf(scene, 'a').material as THREE.MeshBasicMaterial).opacity).toBe(DIMMED_OPACITY);
+    applyThermalOverlay(scene, null);
+    expect(materialOf(meshOf(scene, 'a')).opacity).toBe(DIMMED_OPACITY);
+    expect(materialOf(meshOf(scene, 'b')).opacity).toBe(1);
+  });
+
+  it('a layer added after the overlay was set can be painted, and changing the overlay replaces the old paint', () => {
+    const scene = build();
+    applyThermalOverlay(scene, overlay());
+    const s = spec();
+    s.layers.push(layer('e', 0.05, 'Mineral wool'));
+    syncWallScene(scene, layoutOf(s), true);
+    expect(meshOf(scene, 'e').material).toBeInstanceOf(THREE.MeshStandardMaterial); // not painted until the overlay is applied again
+    const o = overlay();
+    o.layers.push({ id: 'e', startC: 5.2, endC: 5.1 });
+    applyThermalOverlay(scene, o);
+    expect(meshOf(scene, 'e').material).toBeInstanceOf(THREE.MeshBasicMaterial);
+  });
+
+  it('frees the colour geometry when the paint is removed or the scene is disposed', () => {
+    const scene = build();
+    applyThermalOverlay(scene, overlay());
+    const painted = meshOf(scene, 'a').geometry;
+    let freed = 0;
+    painted.addEventListener('dispose', () => freed++);
+    applyThermalOverlay(scene, null);
+    expect(freed).toBe(1);
+    applyThermalOverlay(scene, overlay());
+    const again = meshOf(scene, 'b').geometry;
+    again.addEventListener('dispose', () => freed++);
+    disposeWallScene(scene);
+    expect(freed).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Heat-flow arrows: direction only
+// ---------------------------------------------------------------------------
+describe('heat-flow arrows', () => {
+  const layout = layoutOf(spec());
+  const arrows = (scene: ReturnType<typeof createWallScene>) => scene.flow.children as THREE.Group[];
+  const headX = (arrow: THREE.Group): number => {
+    arrow.updateWorldMatrix(true, true);
+    return new THREE.Vector3().setFromMatrixPosition((arrow.children[1] as THREE.Mesh).matrixWorld).x;
+  };
+  const shaftX = (arrow: THREE.Group): number => {
+    arrow.updateWorldMatrix(true, true);
+    return new THREE.Vector3().setFromMatrixPosition((arrow.children[0] as THREE.Mesh).matrixWorld).x;
+  };
+
+  it('outward heat loss: every arrow points from the interior side to the exterior side (+x)', () => {
+    const scene = createWallScene();
+    syncHeatFlow(scene, layout, 'outward');
+    expect(arrows(scene).length).toBeGreaterThan(3);
+    for (const a of arrows(scene)) expect(headX(a)).toBeGreaterThan(shaftX(a));
+    expect(scene.flow.userData).toMatchObject({ direction: 'outward', count: arrows(scene).length });
+  });
+
+  it('inward heat gain: every arrow points from the exterior side to the interior side (−x)', () => {
+    const scene = createWallScene();
+    syncHeatFlow(scene, layout, 'inward');
+    for (const a of arrows(scene)) expect(headX(a)).toBeLessThan(shaftX(a));
+  });
+
+  it('no temperature difference, or null: no arrows at all', () => {
+    const scene = createWallScene();
+    syncHeatFlow(scene, layout, 'outward');
+    syncHeatFlow(scene, layout, 'none');
+    expect(arrows(scene)).toHaveLength(0);
+    syncHeatFlow(scene, layout, 'inward');
+    syncHeatFlow(scene, layout, null);
+    expect(arrows(scene)).toHaveLength(0);
+  });
+
+  it('arrows run right through the wall and a little beyond both faces', () => {
+    const scene = createWallScene();
+    syncHeatFlow(scene, layout, 'outward');
+    scene.flow.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(scene.flow);
+    expect(box.min.x).toBeLessThan(layout.interiorFaceX);
+    expect(box.max.x).toBeGreaterThan(layout.exteriorFaceX);
+  });
+
+  it('arrows stay within the wall\'s height and width, in a regular grid', () => {
+    const scene = createWallScene();
+    syncHeatFlow(scene, layout, 'outward');
+    const ys = new Set(arrows(scene).map((a) => a.position.y));
+    const zs = new Set(arrows(scene).map((a) => a.position.z));
+    expect(ys.size * zs.size).toBe(arrows(scene).length);
+    for (const y of ys) expect(Math.abs(y)).toBeLessThan(layout.heightM / 2);
+    for (const z of zs) expect(Math.abs(z)).toBeLessThan(layout.widthM / 2);
+  });
+
+  it('all arrows are identical in size: they show direction, never magnitude', () => {
+    const scene = createWallScene();
+    syncHeatFlow(scene, layout, 'outward');
+    const lengths = arrows(scene).map((a) => Math.abs(headX(a) - shaftX(a)));
+    for (const l of lengths) expectClose(l, at(lengths, 0), 1e-12);
+  });
+
+  it('are kept apart from the wall group so they never change the wall\'s measured size', () => {
+    const scene = createWallScene();
+    syncWallScene(scene, layout, true);
+    const before = new THREE.Box3().setFromObject(scene.group).getSize(new THREE.Vector3()).toArray();
+    syncHeatFlow(scene, layout, 'outward');
+    expect(new THREE.Box3().setFromObject(scene.group).getSize(new THREE.Vector3()).toArray()).toEqual(before);
+    expect(scene.group.children.some((c) => c === scene.flow)).toBe(false);
+  });
+
+  it('are rebuilt (not accumulated) on every sync and freed on dispose', () => {
+    const scene = createWallScene();
+    syncHeatFlow(scene, layout, 'outward');
+    const n = arrows(scene).length;
+    syncHeatFlow(scene, layout, 'outward');
+    expect(arrows(scene)).toHaveLength(n);
+    const geometry = (arrows(scene)[0]?.children[0] as THREE.Mesh).geometry;
+    let freed = false;
+    geometry.addEventListener('dispose', () => (freed = true));
+    disposeWallScene(scene);
+    expect(freed).toBe(true);
+    expect(arrows(scene)).toHaveLength(0);
+  });
+
+  it('draw on top of the wall (not hidden inside it)', () => {
+    const scene = createWallScene();
+    syncHeatFlow(scene, layout, 'outward');
+    const arrow = arrows(scene)[0] as THREE.Group;
+    expect(((arrow.children[0] as THREE.Mesh).material as THREE.Material).depthTest).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ground grid
+// ---------------------------------------------------------------------------
+describe('ground grid', () => {
+  it('is a metric grid just below the bottom of the wall, wider than the wall', () => {
+    const layout = layoutOf(spec());
+    const g = gridSpec(layout);
+    const grid = buildGround(g);
+    expect(grid).toBeInstanceOf(THREE.GridHelper);
+    expect(grid.position.y).toBeLessThan(-layout.heightM / 2);
+    expect(grid.position.y).toBeGreaterThan(-layout.heightM / 2 - 0.01);
+    const size = new THREE.Box3().setFromObject(grid).getSize(new THREE.Vector3());
+    expectClose(size.x, 2 * g.halfExtentM, 1e-9);
+    expect(size.x).toBeGreaterThan(layout.widthM);
+  });
+
+  it('its line spacing equals the stated step', () => {
+    const g = gridSpec(layoutOf(spec()));
+    const grid = buildGround(g);
+    const positions = grid.geometry.getAttribute('position');
+    const xs = new Set<number>();
+    for (let i = 0; i < positions.count; i++) xs.add(Number(positions.getX(i).toFixed(6)));
+    const sorted = [...xs].sort((a, b) => a - b);
+    expectClose(at(sorted, 1) - at(sorted, 0), g.stepM, 1e-6);
   });
 });

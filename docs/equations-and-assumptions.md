@@ -48,6 +48,11 @@ Equations 10–13 follow from steady state: the same flux passes through every e
 
 **Magnitude vs direction.** Equation 5 gives only a magnitude (≥ 0). Equation 6 gives the direction separately. The result object keeps them in different fields on purpose.
 
+### Display mappings (no new physics)
+
+- **Thermal overlay colour:** fraction = (T − T_min) / (T_max − T_min), where T_min and T_max are the coldest and warmest temperatures in the wall (surface and interface temperatures from equations 11–13); the fraction picks a colour from a fixed blue → grey → red scale (`src/geometry/colormap.ts`). Inside a layer T varies linearly between its two face temperatures.
+- **Comparisons** run the unchanged engine on copies of the wall with ONE parameter changed; percentage change = (variant − current) / current × 100.
+
 ## 3. Assumptions built into every result
 
 1. Steady state, one-dimensional heat flow, constant inside and outside air temperatures.

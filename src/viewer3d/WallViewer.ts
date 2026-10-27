@@ -9,10 +9,10 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { describeLayout, spreadLabels } from '../geometry';
-import type { WallLayout } from '../geometry';
-import { createWallScene, disposeWallScene, pickLayer, setSelection, stepWallScene, syncWallScene } from './sceneBuilder';
-import type { ViewerHandlers, ViewPreset, WallViewer } from './types';
+import { describeLayout, gridSpec, spreadLabels, temperatureFraction, thermalCss } from '../geometry';
+import type { FlowDirection, ThermalOverlay, WallLayout } from '../geometry';
+import { applyThermalOverlay, buildGround, createWallScene, disposeWallScene, pickLayer, setSelection, stepWallScene, syncHeatFlow, syncWallScene } from './sceneBuilder';
+import type { NavigationMode, ViewerHandlers, ViewPreset, WallViewer } from './types';
 
 const FOV_DEGREES = 40;
 /** Direction from the wall centre to the camera for each preset (x: interior → exterior). */
@@ -65,7 +65,7 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
   fillLight.position.set(4, 1, -3);
   scene.add(keyLight, fillLight);
   const wall = createWallScene();
-  scene.add(wall.group);
+  scene.add(wall.group, wall.flow);
 
   const camera = new THREE.PerspectiveCamera(FOV_DEGREES, 1, 0.01, 100);
   const controls = new OrbitControls(camera, canvas);
@@ -75,6 +75,12 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
   // ---- state ---------------------------------------------------------------------------
   let layout: WallLayout | null = null;
   let selectedId: string | null = null;
+  let thermal: ThermalOverlay | null = null;
+  let flowDirection: FlowDirection | null = null;
+  let gridVisible = true;
+  let grid: THREE.GridHelper | null = null;
+  let gridKey = '';
+  let navigationMode: NavigationMode = 'orbit';
   let labelsVisible = true;
   let destroyed = false;
   let frame = 0;
@@ -105,6 +111,24 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
   }
 
   const leaderLines = new Map<string, { line: SVGLineElement; dot: SVGCircleElement }>();
+  const swatches = new Map<string, HTMLElement>();
+
+  /** Label swatches show each layer's category colour, or its temperature gradient while the overlay is on. */
+  function refreshSwatches(): void {
+    if (!layout) return;
+    for (const box of layout.layers) {
+      const swatch = swatches.get(box.id);
+      const entry = thermal?.layers.find((l) => l.id === box.id);
+      if (!swatch) continue;
+      if (thermal && entry) {
+        const a = thermalCss(temperatureFraction(entry.startC, thermal.minC, thermal.maxC));
+        const b = thermalCss(temperatureFraction(entry.endC, thermal.minC, thermal.maxC));
+        swatch.style.background = `linear-gradient(to right, ${a}, ${b})`;
+      } else {
+        swatch.style.background = box.color;
+      }
+    }
+  }
 
   function placeLabels(): void {
     if (!layout) return;
@@ -251,7 +275,7 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
     if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 5) handlers.onSelect?.(layerAt(e.clientX, e.clientY));
   };
   const onPointerMove = (e: PointerEvent): void => {
-    if (e.buttons === 0) canvas.style.cursor = layerAt(e.clientX, e.clientY) ? 'pointer' : 'grab';
+    if (e.buttons === 0) canvas.style.cursor = layerAt(e.clientX, e.clientY) ? 'pointer' : navigationMode === 'pan' ? 'move' : 'grab';
   };
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointerup', onPointerUp);
@@ -266,10 +290,36 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
   observer?.observe(container);
   resize();
 
+  /** (Re)builds the ground grid for the current wall; skipped when nothing relevant changed. */
+  function refreshGrid(next: WallLayout): void {
+    const spec = gridSpec(next);
+    const key = JSON.stringify(spec);
+    if (key === gridKey) return;
+    gridKey = key;
+    if (grid) {
+      scene.remove(grid);
+      grid.geometry.dispose();
+      (grid.material as THREE.Material).dispose();
+    }
+    grid = buildGround(spec);
+    grid.visible = gridVisible;
+    scene.add(grid);
+  }
+
+  function setNavigation(mode: NavigationMode): void {
+    navigationMode = mode;
+    const rotate = THREE.MOUSE.ROTATE;
+    const pan = THREE.MOUSE.PAN;
+    controls.mouseButtons = { LEFT: mode === 'pan' ? pan : rotate, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: mode === 'pan' ? rotate : pan };
+    controls.touches = { ONE: mode === 'pan' ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+    canvas.style.cursor = mode === 'pan' ? 'move' : 'grab';
+  }
+
   // ---- public interface --------------------------------------------------------------------------------
   function rebuildLabels(next: WallLayout): void {
     for (const label of layerLabels.values()) label.remove();
     layerLabels.clear();
+    swatches.clear();
     leaders.replaceChildren();
     leaderLines.clear();
     for (const box of next.layers) {
@@ -286,11 +336,13 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
       label.dataset.layerId = box.id;
       const swatch = el('span', 'viewer-swatch');
       swatch.style.background = box.color;
+      swatches.set(box.id, swatch);
       label.append(swatch, el('span', 'viewer-label-text', `${box.name} — ${box.thicknessLabel}`));
       overlay.append(label);
       layerLabels.set(box.id, label);
     }
     refreshLabelStyles();
+    refreshSwatches();
   }
 
   function refreshLabelStyles(): void {
@@ -304,6 +356,9 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
       layout = next;
       syncWallScene(wall, next, first || reducedMotion());
       rebuildLabels(next);
+      refreshGrid(next);
+      applyThermalOverlay(wall, thermal); // new boxes need the paint too
+      syncHeatFlow(wall, next, flowDirection);
       setSelection(wall, selectedId);
       canvas.setAttribute('aria-label', describeLayout(next));
       if (first) {
@@ -325,6 +380,26 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
       requestRender();
     },
     setView,
+    setThermalOverlay(overlay: ThermalOverlay | null): void {
+      thermal = overlay;
+      applyThermalOverlay(wall, overlay);
+      refreshSwatches();
+      requestRender();
+    },
+    setHeatFlow(direction: FlowDirection | null): void {
+      flowDirection = direction;
+      if (layout) syncHeatFlow(wall, layout, direction);
+      requestRender();
+    },
+    setGridVisible(visible: boolean): void {
+      gridVisible = visible;
+      if (grid) grid.visible = visible;
+      requestRender();
+    },
+    setNavigationMode: setNavigation,
+    zoom(factor: number): void {
+      orbit(0, 0, factor);
+    },
     destroy(): void {
       destroyed = true;
       if (frame) cancelAnimationFrame(frame);
@@ -336,6 +411,10 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
       canvas.removeEventListener('webglcontextlost', onContextLost);
       canvas.removeEventListener('webglcontextrestored', requestRender);
       controls.dispose();
+      if (grid) {
+        grid.geometry.dispose();
+        (grid.material as THREE.Material).dispose();
+      }
       disposeWallScene(wall);
       renderer.dispose();
       canvas.remove();

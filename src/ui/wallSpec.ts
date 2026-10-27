@@ -1,5 +1,6 @@
+import type { Analysis } from '../analysis';
 import type { LayerView } from '../editor';
-import type { WallSpec } from '../geometry';
+import type { ThermalOverlay, WallSpec } from '../geometry';
 import type { WallInput } from '../engine';
 
 /**
@@ -28,5 +29,27 @@ export function wallSpecFromViews(wall: WallInput, views: readonly LayerView[]):
         status: view.material.status,
       };
     }),
+  };
+}
+
+/**
+ * The engine's calculated temperatures, arranged for painting on the 3D wall.
+ * Nothing is computed here: each layer's start/end temperature is taken from
+ * the analysis, and the colour range is the coldest to the warmest
+ * temperature present in the wall.
+ */
+export function thermalOverlayFromAnalysis(analysis: Analysis, views: readonly LayerView[]): ThermalOverlay {
+  if (analysis.layerTemperatures.length !== views.length) {
+    throw new Error(`Analysis has ${analysis.layerTemperatures.length} layers but ${views.length} layer views were given.`);
+  }
+  return {
+    minC: analysis.temperatureRangeC.minC,
+    maxC: analysis.temperatureRangeC.maxC,
+    direction: analysis.result.heatTransfer.direction,
+    layers: views.map((view, i) => ({
+      id: view.key,
+      startC: analysis.layerTemperatures[i]?.startC ?? Number.NaN,
+      endC: analysis.layerTemperatures[i]?.endC ?? Number.NaN,
+    })),
   };
 }

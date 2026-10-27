@@ -38,15 +38,18 @@ import {
   warningFor,
 } from '../editor';
 import type { BuildResult, LayerView, LengthUnit, SurfaceMode, TemperatureUnit, WallDraft } from '../editor';
+import { analyzeWall } from '../analysis';
 import { colorForCategory } from '../geometry';
 import { BUILT_IN_MATERIALS, MATERIAL_CATEGORIES, searchMaterials } from '../materials';
 import type { MaterialRecord } from '../materials';
 import type { ViewerFactory } from '../viewer3d';
 import { h, show } from './dom';
 import type { Child } from './dom';
+import { createResultsPanel } from './resultsPanel';
+import type { ResultsPanel } from './resultsPanel';
 import { createViewerPanel } from './viewerPanel';
 import type { ViewerPanel } from './viewerPanel';
-import { wallSpecFromViews } from './wallSpec';
+import { thermalOverlayFromAnalysis, wallSpecFromViews } from './wallSpec';
 
 export interface WallEditorOptions {
   /**
@@ -64,6 +67,8 @@ export interface WallEditorHandle {
   getResult(): BuildResult;
   /** The 3D panel (layout, selection). */
   viewer: ViewerPanel;
+  /** The results panel (tabs). */
+  results: ResultsPanel;
   /** Resolves once the 3D viewer has been created or found unavailable. */
   ready: Promise<void>;
   /** Releases the 3D viewer. */
@@ -267,31 +272,43 @@ export function mountWallEditor(
 
   const summary = h('section', { id: 'summary', 'aria-labelledby': 'h-summary', 'aria-live': 'polite' });
 
-  // ---- 3D panel ------------------------------------------------------------------------------------------
+  // ---- 3D viewport and results panel ---------------------------------------------------------------------
   const viewerPanel = createViewerPanel({
     ...(options.viewerFactory ? { viewerFactory: options.viewerFactory } : {}),
     onSelectionChange: () => refreshSelectionUi(),
     announce: (text) => announce(text),
   });
+  const resultsPanel = createResultsPanel({ materials, announce: (text) => announce(text) });
+  resultsPanel.configurationHost.append(summary);
 
-  // ---- page skeleton -----------------------------------------------------------------------------
-
-  root.replaceChildren(
+  // ---- workspace shell -------------------------------------------------------------------------------------
+  const validity = h('p', { class: 'validity', 'data-role': 'validity' });
+  const sidebarToggle = h('button', { type: 'button', class: 'tool', 'aria-expanded': 'true', 'aria-controls': 'sidebar', 'data-role': 'sidebar-toggle' }, '☰ Inputs');
+  const workspace = h(
+    'div',
+    { class: 'workspace' },
     h(
       'header',
-      { class: 'page-header' },
+      { class: 'topbar' },
+      sidebarToggle,
       h('h1', {}, 'Wall Thermal Simulator'),
-      h('p', { class: 'subtitle' }, 'Multilayer wall editor with a 3D view — Stage 5. Calculation results, temperature profiles and reports come in later stages.'),
-      h('p', { class: 'policy', role: 'note' }, DATA_POLICY),
+      h('span', { class: 'mode-chip' }, 'Steady-state wall analysis'),
+      h('details', { class: 'policy', role: 'note' }, h('summary', {}, 'Data policy: illustrative values, not approved Cypriot design values'), h('p', {}, DATA_POLICY)),
     ),
     h(
-      'main',
-      { class: 'layout' },
-      h('div', { class: 'editor' }, dimensionsSection, layersSection, boundarySection, summary),
-      h('aside', { class: 'viewer-column', 'aria-label': '3D view' }, viewerPanel.element),
+      'div',
+      { class: 'workspace-body' },
+      h('aside', { id: 'sidebar', class: 'sidebar', 'aria-label': 'Wall inputs' }, validity, dimensionsSection, layersSection, boundarySection),
+      h('main', { class: 'stage-column' }, viewerPanel.element, resultsPanel.element),
     ),
     status,
   );
+  sidebarToggle.addEventListener('click', () => {
+    const collapsed = workspace.classList.toggle('sidebar-collapsed');
+    sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+    announce(collapsed ? 'Input sidebar hidden.' : 'Input sidebar shown.');
+  });
+  root.replaceChildren(workspace);
 
   // ---- rendering ------------------------------------------------------------------------------------
 
@@ -528,8 +545,23 @@ export function mountWallEditor(
 
     renderSummary(views);
 
-    // The 3D view is drawn only from a VALID wall; with errors it keeps the last valid one.
-    viewerPanel.setWall(result.wall ? { spec: wallSpecFromViews(result.wall, views), views } : null, !result.ok);
+    // Results and the 3D view come only from a VALID wall; with errors both keep the last valid one.
+    validity.textContent = result.ok ? '✔ Valid wall' : `✖ ${result.errors.length} problem${result.errors.length === 1 ? '' : 's'} to fix (see the messages)`;
+    validity.className = `validity ${result.ok ? 'ok' : 'bad'}`;
+    const outcome = result.wall ? analyzeWall(result.wall) : null;
+    const analysis = outcome?.ok ? outcome.analysis : null;
+    viewerPanel.setWall(
+      result.wall
+        ? {
+            spec: wallSpecFromViews(result.wall, views),
+            views,
+            thermal: analysis ? thermalOverlayFromAnalysis(analysis, views) : null,
+            thermalNote: analysis?.usesUnverifiedData ? 'Uses illustrative or unverified material data: not a design value.' : '',
+          }
+        : null,
+      !result.ok,
+    );
+    resultsPanel.setState(result.wall && analysis ? { wall: result.wall, views, analysis } : null, !result.ok);
     refreshSelectionUi();
   }
 
@@ -617,6 +649,7 @@ export function mountWallEditor(
     getDraft: () => draft,
     getResult: () => result,
     viewer: viewerPanel,
+    results: resultsPanel,
     ready: viewerPanel.ready,
     destroy: () => viewerPanel.destroy(),
   };

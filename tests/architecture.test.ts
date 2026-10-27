@@ -55,10 +55,14 @@ const RULES: Record<string, { allowed: string[]; typeOnlyAllowed?: string[]; fil
   geometry: { allowed: ['geometry'], typeOnlyAllowed: ['engine'] },
   // The 3D library lives here and nowhere else. It knows only the geometry.
   viewer3d: { allowed: ['viewer3d', 'geometry'] },
+  // The bridge from the screen to the engine: runs the calculations, returns plain results.
+  analysis: { allowed: ['analysis', 'engine', 'materials', 'units'] },
+  // Dependency-free SVG charts: plain data in, SVG out.
+  charts: { allowed: ['charts'] },
   editor: { allowed: ['editor', 'engine', 'materials', 'units'] },
   // The screen shows what the editor and geometry produce. It may import the engine and the viewer only for TYPES,
   // except the entry file, which loads the viewer on demand.
-  ui: { allowed: ['ui', 'editor', 'materials', 'geometry'], typeOnlyAllowed: ['engine', 'viewer3d'], fileExceptions: { 'ui/main.ts': ['viewer3d'] } },
+  ui: { allowed: ['ui', 'editor', 'materials', 'geometry', 'analysis', 'charts'], typeOnlyAllowed: ['engine', 'viewer3d'], fileExceptions: { 'ui/main.ts': ['viewer3d'] } },
 };
 
 describe('module boundaries', () => {
@@ -90,7 +94,7 @@ describe('module boundaries', () => {
 });
 
 describe('no screen code outside src/ui', () => {
-  for (const module of ['engine', 'units', 'materials', 'editor', 'geometry']) {
+  for (const module of ['engine', 'units', 'materials', 'editor', 'geometry', 'analysis']) {
     it(`${module}/ does not touch the DOM, window or document`, () => {
       const offenders = sourceFiles(module).filter((file) => /\b(document|window|localStorage|HTMLElement)\b/.test(codeOf(file)));
       expect(offenders).toEqual([]);
