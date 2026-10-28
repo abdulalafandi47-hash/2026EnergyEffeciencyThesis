@@ -1,10 +1,9 @@
 # Builds the app and publishes it to the "gh-pages" branch, which GitHub Pages can serve
-# as a live preview. Runs on every push to a stage branch listed below, or by hand (Actions tab -> Run workflow).
-# The most recent successful run is what the preview shows.
+# as a live preview. Runs on every push to master, or by hand (Actions tab -> Run workflow).
 name: Publish preview
 on:
   push:
-    branches: [feature/stage-7-reports, feature/stage-8-testing]
+    branches: [master]
   workflow_dispatch:
 permissions:
   contents: write
