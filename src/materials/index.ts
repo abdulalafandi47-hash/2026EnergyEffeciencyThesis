@@ -1,5 +1,6 @@
 /** Public API of the material database. Other modules import from here only. */
-export { createCustomMaterial, slugify } from './customMaterial';
+export { createCustomMaterial, MAX_NAME_CHARS, MAX_NOTE_CHARS, slugify, tryCreateCustomMaterial } from './customMaterial';
+export type { CustomMaterialOutcome } from './customMaterial';
 export {
   BUILT_IN_MATERIALS,
   DATABASE_DISCLAIMER,

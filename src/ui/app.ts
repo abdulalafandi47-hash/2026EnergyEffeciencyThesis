@@ -42,14 +42,16 @@ import {
 import type { BuildResult, LayerView, LengthUnit, SurfaceMode, TemperatureUnit, WallDraft } from '../editor';
 import { analyzeWall } from '../analysis';
 import { colorForCategory } from '../geometry';
-import { BUILT_IN_MATERIALS, MATERIAL_CATEGORIES, searchMaterials } from '../materials';
-import type { MaterialRecord } from '../materials';
+import { BUILT_IN_MATERIALS, MATERIAL_CATEGORIES, searchMaterials, tryCreateCustomMaterial } from '../materials';
+import type { CustomMaterialInput, MaterialRecord } from '../materials';
 import { wallFileBase } from '../report';
 import type { ViewerFactory } from '../viewer3d';
-import { h, show } from './dom';
+import { h, show, tableRegion } from './dom';
 import type { Child } from './dom';
 import { browserIo } from './io';
 import type { FileIo } from './io';
+import { createMaterialsPanel } from './materialsPanel';
+import type { AddCustomOutcome } from './materialsPanel';
 import { createResultsPanel } from './resultsPanel';
 import type { ResultsPanel } from './resultsPanel';
 import { createViewerPanel } from './viewerPanel';
@@ -79,6 +81,10 @@ export interface WallEditorHandle {
   viewer: ViewerPanel;
   /** The results panel (tabs). */
   results: ResultsPanel;
+  /** The custom (user-defined) materials defined in this session. */
+  getCustomMaterials(): readonly MaterialRecord[];
+  /** Adds a custom material (the same path as the form in the Materials tab). */
+  addCustomMaterial(input: CustomMaterialInput): AddCustomOutcome;
   /** Replaces the whole draft with the text of a saved wall file. Nothing changes if the file is refused. */
   openWallText(text: string, filename?: string): OpenWallOutcome;
   /** Resolves once the 3D viewer has been created or found unavailable. */
@@ -114,9 +120,12 @@ export function mountWallEditor(
   options: WallEditorOptions = {},
 ): WallEditorHandle {
   const io = options.io ?? browserIo;
+  /** Materials the user defines in this session ("user-defined"); built-in ones come from `materials`. */
+  let customMaterials: MaterialRecord[] = [];
+  const allMaterials = (): MaterialRecord[] => [...materials, ...customMaterials];
   let draft: WallDraft = createInitialDraft(materials);
   let materialFilter = '';
-  let result: BuildResult = buildWall(draft, materials);
+  let result: BuildResult = buildWall(draft, allMaterials());
 
   /** Inputs and their message areas, by field id, for refreshing validation text. */
   const inputs = new Map<string, HTMLInputElement | HTMLSelectElement>();
@@ -255,6 +264,7 @@ export function mountWallEditor(
     focusById(`${draft.layers.at(-1)?.key}:material`);
   });
   const resetButton = h('button', { type: 'button', 'data-focus-id': 'reset' }, 'Reset to example wall');
+  const customButton = h('button', { type: 'button', 'data-role': 'open-custom-material' }, '＋ Custom material…');
   resetButton.addEventListener('click', () => {
     draft = createInitialDraft(materials);
     syncStaticInputs();
@@ -278,7 +288,7 @@ export function mountWallEditor(
     layersList,
     h('div', { class: 'face face-exterior' }, h('strong', {}, 'EXTERIOR FACE'), ' — outside of the building (weather side)'),
     layersMessage,
-    h('div', { class: 'actions' }, addButton, resetButton),
+    h('div', { class: 'actions' }, addButton, resetButton, customButton),
   );
 
   // ---- summary --------------------------------------------------------------------------------
@@ -291,7 +301,15 @@ export function mountWallEditor(
     onSelectionChange: () => refreshSelectionUi(),
     announce: (text) => announce(text),
   });
-  const resultsPanel = createResultsPanel({ materials, announce: (text) => announce(text), io });
+  const materialsPanel = createMaterialsPanel({
+    getMaterials: allMaterials,
+    addCustom: (input) => addCustomMaterial(input),
+    removeCustom: (id) => removeCustomMaterial(id),
+    usedBy: (id) => draft.layers.flatMap((layer, i) => (layer.materialId === id ? [i + 1] : [])),
+    io,
+    announce: (text) => announce(text),
+  });
+  const resultsPanel = createResultsPanel({ materials: allMaterials, announce: (text) => announce(text), io, materialsPanel });
   resultsPanel.configurationHost.append(summary);
 
   // ---- workspace shell -------------------------------------------------------------------------------------
@@ -311,7 +329,7 @@ export function mountWallEditor(
       h('h1', {}, 'Wall Thermal Simulator'),
       h('span', { class: 'mode-chip' }, 'Steady-state wall analysis'),
       h('span', { class: 'file-tools' }, saveButton, openButton, openInput),
-      h('details', { class: 'policy', role: 'note' }, h('summary', {}, 'Data policy: illustrative values, not approved Cypriot design values'), h('p', {}, DATA_POLICY)),
+      h('details', { class: 'policy' }, h('summary', {}, 'Data policy: illustrative values, not approved Cypriot design values'), h('p', {}, DATA_POLICY)),
     ),
     h(
       'div',
@@ -328,9 +346,15 @@ export function mountWallEditor(
   });
   root.replaceChildren(workspace);
 
+  customButton.addEventListener('click', () => {
+    resultsPanel.selectTab('materials');
+    materialsPanel.focusForm();
+    announce('Materials tab opened: fill in the custom-material form.');
+  });
+
   saveButton.addEventListener('click', () => {
     const filename = `${wallFileBase(io.now())}.json`;
-    io.download(filename, 'application/json', serializeDraft(draft, materials) + '\n');
+    io.download(filename, 'application/json', serializeDraft(draft, allMaterials(), customMaterials) + '\n');
     showFileMessage(`Saved ${filename} (see your browser's downloads).`, 'ok');
     announce(`Wall saved as ${filename}.`);
   });
@@ -362,15 +386,41 @@ export function mountWallEditor(
       return parsed;
     }
     draft = parsed.draft;
+    // The file's custom materials join the session's; a record with the same id is replaced by the file's.
+    const fromFile = new Set(parsed.customMaterials.map((m) => m.id));
+    customMaterials = [...customMaterials.filter((m) => !fromFile.has(m.id)), ...parsed.customMaterials];
     syncStaticInputs();
     renderLayers();
     refresh();
     showFileMessage(
-      parsed.warnings.length > 0 ? `Opened ${filename} with ${parsed.warnings.length} warning${parsed.warnings.length === 1 ? '' : 's'}: ${parsed.warnings.join(' ')}` : `Opened ${filename}.`,
+      `Opened ${filename}${parsed.customMaterials.length > 0 ? ` (with ${parsed.customMaterials.length} custom material${parsed.customMaterials.length === 1 ? '' : 's'})` : ''}` +
+        (parsed.warnings.length > 0 ? ` with ${parsed.warnings.length} warning${parsed.warnings.length === 1 ? '' : 's'}: ${parsed.warnings.join(' ')}` : '.'),
       parsed.warnings.length > 0 ? 'warn' : 'ok',
     );
     announce(`Opened ${filename}.`);
     return { ok: true, warnings: parsed.warnings };
+  }
+
+  function addCustomMaterial(input: CustomMaterialInput): AddCustomOutcome {
+    const created = tryCreateCustomMaterial(input, allMaterials().map((m) => m.id));
+    if (!created.ok) return created;
+    customMaterials = [...customMaterials, created.material];
+    renderLayers();
+    refresh();
+    return created;
+  }
+
+  function removeCustomMaterial(id: string): { ok: boolean; message: string } {
+    const material = customMaterials.find((m) => m.id === id);
+    if (!material) return { ok: false, message: 'That material is not a custom material of this session.' };
+    const used = draft.layers.flatMap((layer, i) => (layer.materialId === id ? [i + 1] : []));
+    if (used.length > 0) {
+      return { ok: false, message: `"${material.name}" is used by layer ${used.join(', ')}. Choose another material for ${used.length === 1 ? 'that layer' : 'those layers'} first.` };
+    }
+    customMaterials = customMaterials.filter((m) => m.id !== id);
+    renderLayers();
+    refresh();
+    return { ok: true, message: `Custom material "${material.name}" removed.` };
   }
 
   // ---- rendering ------------------------------------------------------------------------------------
@@ -411,8 +461,8 @@ export function mountWallEditor(
   }
 
   function materialOptions(selectedId: string | null): HTMLElement[] {
-    let list = searchMaterials(materials, { text: materialFilter });
-    const selected = selectedId === null ? undefined : materials.find((m) => m.id === selectedId);
+    let list = searchMaterials(allMaterials(), { text: materialFilter });
+    const selected = selectedId === null ? undefined : allMaterials().find((m) => m.id === selectedId);
     if (selected && !list.includes(selected)) list = [selected, ...list]; // never hide the current choice
     const groups: HTMLElement[] = [];
     for (const category of MATERIAL_CATEGORIES) {
@@ -443,7 +493,7 @@ export function mountWallEditor(
         messages.delete(field);
       }
     }
-    const views = describeLayers(draft, materials);
+    const views = describeLayers(draft, allMaterials());
     layersList.replaceChildren(...views.map((view) => renderLayer(view, views.length)));
     if (views.length === 0) {
       layersList.append(h('li', { class: 'empty' }, 'No layers yet. Use "Add layer" to start building the wall.'));
@@ -574,7 +624,7 @@ export function mountWallEditor(
 
   /** Re-validates the draft and updates every message, readout and the summary. */
   function refresh(): void {
-    result = buildWall(draft, materials);
+    result = buildWall(draft, allMaterials());
 
     for (const [field, input] of inputs) {
       const error = errorFor(result, field);
@@ -593,7 +643,7 @@ export function mountWallEditor(
 
     customSurfaceBox.hidden = draft.surfaceMode !== 'custom';
 
-    const views = describeLayers(draft, materials);
+    const views = describeLayers(draft, allMaterials());
     for (const view of views) {
       for (const element of layersList.querySelectorAll<HTMLElement>('[data-role="thickness-m"]')) {
         if (element.dataset.key === view.key) {
@@ -669,9 +719,8 @@ export function mountWallEditor(
       ),
     );
     parts.push(
-      h(
-        'div',
-        { class: 'table-wrap' },
+      tableRegion(
+        'Layers table (scrolls sideways on narrow screens)',
         h(
         'table',
         {},
@@ -714,6 +763,8 @@ export function mountWallEditor(
     viewer: viewerPanel,
     results: resultsPanel,
     openWallText,
+    getCustomMaterials: () => customMaterials,
+    addCustomMaterial,
     ready: viewerPanel.ready,
     destroy: () => viewerPanel.destroy(),
   };

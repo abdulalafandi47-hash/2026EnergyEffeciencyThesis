@@ -120,7 +120,7 @@ describe('results panel: tabs', () => {
 
   it('is a proper tab list: one selected tab, one visible panel, each panel labelled by its tab', () => {
     expect(root.querySelector('[role="tablist"]')).not.toBeNull();
-    expect(tabs().map((t) => t.textContent)).toEqual(['Results', 'Layers & temperatures', 'Temperature profile', 'Compare', 'Assumptions & references', 'Report', 'Configuration']);
+    expect(tabs().map((t) => t.textContent)).toEqual(['Results', 'Layers & temperatures', 'Temperature profile', 'Compare', 'Materials', 'Assumptions & references', 'Report', 'Configuration']);
     expect(tabs().filter((t) => t.getAttribute('aria-selected') === 'true')).toHaveLength(1);
     expect(root.querySelectorAll('[role="tabpanel"]:not([hidden])')).toHaveLength(1);
     for (const t of tabs()) {

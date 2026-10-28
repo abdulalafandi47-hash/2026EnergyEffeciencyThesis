@@ -1,5 +1,5 @@
 /** Public API of the report module (pure: no screen code, no file or network access). */
-export { buildReport, DEFAULT_REPORT_TITLE, engineInputJson, fingerprintOf, reportFileBase, wallFileBase } from './buildReport';
+export { buildReport, DEFAULT_REPORT_TITLE, engineInputJson, fileTimestamp, fingerprintOf, reportFileBase, wallFileBase } from './buildReport';
 export { EQUATIONS, LIMITATIONS, REFERENCES } from './content';
 export type { EquationEntry, LinkEntry, ReferenceRegister, StandardEntry } from './content';
 export { csvCell, escapeHtml, escapeMarkdown, fnv1a, stableJson } from './format';

@@ -28,3 +28,11 @@ export function show(value: number, significant = 4): string {
   if (!Number.isFinite(value)) return '—';
   return String(Number(value.toPrecision(significant)));
 }
+
+/**
+ * A box around a wide table that scrolls sideways on narrow screens. It can take
+ * keyboard focus (so the arrow keys scroll it) and is announced as a named region.
+ */
+export function tableRegion(label: string, ...children: Child[]): HTMLDivElement {
+  return h('div', { class: 'table-wrap', role: 'region', tabindex: '0', 'aria-label': label }, ...children);
+}

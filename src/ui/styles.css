@@ -180,6 +180,14 @@ button.tab[aria-selected="true"] { color: var(--text); font-weight: 700; border-
 .results-body { flex: 1; min-height: 0; overflow: auto; }
 .tabpanel { padding: 6px 10px 10px; }
 
+/* ---- materials tab ---- */
+.materials-layout { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.materials-db, .custom-material-form { min-width: 0; } /* grid items may shrink, so a wide table scrolls inside its own box */
+.custom-material-form textarea { width: 100%; resize: vertical; }
+.materials-table td { font-size: 0.78rem; vertical-align: top; }
+.materials-table ul.limitations { margin: 0; padding-left: 14px; min-width: 18ch; }
+.msg.ok { color: var(--ok); }
+
 /* ---- report tab ---- */
 .report-layout { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 12px; align-items: start; }
 .report-controls textarea { width: 100%; resize: vertical; }
@@ -200,7 +208,7 @@ iframe.report-preview { width: 100%; height: 340px; border: 1px solid var(--bord
 .empty-note { padding: 12px 0; }
 .warnings, .problems { margin: 6px 0; padding-left: 20px; font-size: 0.82rem; }
 .warnings { color: var(--warn); }
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; position: relative; } /* relative: hidden labels inside stay in the box instead of widening the page */
 .data-table, table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin: 6px 0; }
 caption { text-align: left; font-weight: 600; padding-bottom: 3px; color: var(--muted); }
 th, td { border-bottom: 1px solid var(--border); padding: 3px 7px; text-align: left; vertical-align: top; }
@@ -262,7 +270,7 @@ pre { overflow: auto; background: var(--bg); border: 1px solid var(--border); pa
   .viewport { height: 72vh; min-height: 420px; }
   .results-panel, .results-panel.enlarged { height: auto; }
   .results-body { overflow: visible; }
-  .profile-layout, .report-layout { grid-template-columns: minmax(0, 1fr); }
+  .profile-layout, .report-layout, .materials-layout { grid-template-columns: minmax(0, 1fr); }
   iframe.report-preview { height: 60vh; }
   .overlay-right { width: min(260px, 52%); }
   .topbar { flex-wrap: wrap; }

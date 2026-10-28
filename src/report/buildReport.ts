@@ -41,6 +41,9 @@ export function buildReport(input: ReportInput): ReportModel {
   if (analysis.usesUnverifiedData) {
     banners.push('This report uses material values that are illustrative or unverified. They are demonstration numbers, not approved Cypriot design values, and the results must not be used as evidence of compliance or as design values.');
   }
+  if (wall.layers.some((l) => l.propertyStatus === 'user-defined')) {
+    banners.push('Some layers use material values entered by the user (user-defined). This program has not checked them against any source; whoever entered them is responsible for their accuracy and for the conditions they apply to.');
+  }
   if (sr.status !== 'verified') {
     banners.push(`The surface resistances are ${sr.status}: ${sr.status === 'user-defined' ? 'entered by the user' : 'not yet checked against the standard'}.`);
   }
@@ -302,7 +305,12 @@ export function reportFileBase(model: Pick<ReportModel, 'generatedAt' | 'fingerp
   return `wall-report-${stamp}-${model.fingerprint}`;
 }
 
+/** "20261027-123045" for a time (UTC), for use in file names. */
+export function fileTimestamp(time: Date): string {
+  return time.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+}
+
 /** File name without extension for a saved wall, e.g. "wall-20261027-123045" (time is UTC). */
 export function wallFileBase(time: Date): string {
-  return `wall-${time.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)}`;
+  return `wall-${fileTimestamp(time)}`;
 }

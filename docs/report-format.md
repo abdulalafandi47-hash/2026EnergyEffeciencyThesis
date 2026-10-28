@@ -75,14 +75,17 @@ An 8-hex-digit FNV-1a checksum of the engine input (key order fixed). Two report
 ```json
 {
   "schema": "building-thermal-simulator.wall",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "note": "…",
   "draft": { "widthText": "3", "dimensionUnit": "m", "layers": [ { "key": "layer-1", "materialId": "gypsum-plaster", "thicknessText": "15", "thicknessUnit": "mm" } ], … },
-  "materialsUsed": [ { "id": "gypsum-plaster", "name": "…", "lambdaWPerMK": 0.43, "status": "illustrative" } ]
+  "materialsUsed": [ { "id": "gypsum-plaster", "name": "…", "lambdaWPerMK": 0.43, "status": "illustrative" } ],
+  "customMaterials": [ { "id": "custom-…", "status": "user-defined", "…": "complete material record" } ]
 }
 ```
 
-The file stores material **ids**, not property values: values come from the database of the program that opens the file. So that a change in the database cannot pass unnoticed, opening a file **warns** when a material is missing, or when its λ or status differs from the snapshot.
+**Version 2 (Stage 8)** adds `customMaterials`: the session's custom materials as complete records, so a wall that uses a datasheet value can be reopened. Version 1 files (without custom materials) still open. A file can only add records that are valid, `user-defined`, have ids starting `custom-` and do not reuse an existing id (at most 100). Opening a file adds its custom materials to the session's; a record with the same id is replaced by the file's version.
+
+For built-in materials the file stores **ids**, not property values: values come from the database of the program that opens the file. So that a change in the database cannot pass unnoticed, opening a file **warns** when a material is missing, or when its λ or status differs from the snapshot.
 
 A wall file is treated as untrusted input. Opening checks the size (≤ 1 000 000 characters; the Open button refuses files over 2 MB before reading them), the schema name and version (a newer version is refused), every field's type, the unit and mode lists, text length (≤ 64 characters per field), at most 200 layers, unique layer keys of the form `layer-<n>`, and that the next-layer counter is above every key. Every accepted value is copied into a new object (nothing from the file is passed on as-is; extra fields and `__proto__` entries are dropped). A refused file leaves the current wall unchanged and the message says why. A file that is accepted but wrong for the editor (for example an unknown material) is shown with the editor's normal error messages.
 

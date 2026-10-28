@@ -197,3 +197,24 @@ describe('database + engine working together', () => {
     expect(u['eps-slab']).toBeLessThan(u['mineral-wool-slab'] as number);
   });
 });
+
+describe('custom material conditions and text limits (Stage 8)', () => {
+  const base = { name: 'Datasheet board', lambdaWPerMK: 0.031 };
+
+  it('records the conditions the values apply to', () => {
+    const { material } = createCustomMaterial({ ...base, conditions: '  10 °C mean temperature, dry  ' });
+    expect(material.conditions).toBe('10 °C mean temperature, dry');
+    expect(validateMaterial(material)).toEqual([]);
+    expect(createCustomMaterial(base).material.conditions).toBeUndefined();
+    expect(createCustomMaterial({ ...base, conditions: '   ' }).material.conditions).toBeUndefined();
+  });
+
+  it('refuses over-long text with a clear message (the limits are inclusive)', () => {
+    expect(() => createCustomMaterial({ ...base, name: 'x'.repeat(80) })).not.toThrow();
+    expect(issuesOf(() => createCustomMaterial({ ...base, name: 'x'.repeat(81) })).map((i) => i.path)).toEqual(['name']);
+    expect(() => createCustomMaterial({ ...base, sourceNote: 'n'.repeat(500), conditions: 'c'.repeat(500) })).not.toThrow();
+    const issues = issuesOf(() => createCustomMaterial({ ...base, sourceNote: 'n'.repeat(501), conditions: 'c'.repeat(501) }));
+    expect(issues.map((i) => i.path)).toEqual(['sourceNote', 'conditions']);
+    expect(issues[0]?.message).toMatch(/at most 500/);
+  });
+});

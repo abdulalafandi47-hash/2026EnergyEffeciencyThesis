@@ -1,7 +1,12 @@
 import { EngineInputError } from '../engine';
+import type { ValidationIssue } from '../engine';
 import { SI_MATERIAL_UNITS } from './types';
 import type { CustomMaterialInput, MaterialRecord } from './types';
 import { materialWarnings, validateMaterial } from './validateMaterial';
+
+/** Longest name and longest note/conditions text accepted for a custom material. */
+export const MAX_NAME_CHARS = 80;
+export const MAX_NOTE_CHARS = 500;
 
 /** "Mineral Wool (Brand X)!" → "mineral-wool-brand-x". Returns "material" if nothing usable remains. */
 export function slugify(text: string): string {
@@ -37,6 +42,12 @@ export function createCustomMaterial(
   }
 
   const note = typeof input?.sourceNote === 'string' ? input.sourceNote.trim() : '';
+  const conditions = typeof input?.conditions === 'string' ? input.conditions.trim() : '';
+  const tooLong: ValidationIssue[] = [];
+  for (const [path, text, max] of [['name', name, MAX_NAME_CHARS], ['sourceNote', note, MAX_NOTE_CHARS], ['conditions', conditions, MAX_NOTE_CHARS]] as const) {
+    if (text.length > max) tooLong.push({ code: 'invalid-format', path, message: `${path === 'name' ? 'The name' : path === 'sourceNote' ? 'The source note' : 'The conditions text'} is too long (at most ${max} characters).` });
+  }
+  if (tooLong.length > 0) throw new EngineInputError(tooLong);
   const candidate = {
     id,
     name,
@@ -53,6 +64,7 @@ export function createCustomMaterial(
         ? `User-entered: ${note}`
         : 'User-entered values; no source stated. Not checked by this application.',
     },
+    ...(conditions ? { conditions } : {}),
     assumptionsAndLimitations: [
       'User-defined values: the user is responsible for their accuracy and applicability.',
       'Not checked against any standard or datasheet by this application.',
@@ -65,4 +77,18 @@ export function createCustomMaterial(
   }
   const material = candidate as MaterialRecord;
   return { material, warnings: materialWarnings(material) };
+}
+
+export type CustomMaterialOutcome =
+  | { ok: true; material: MaterialRecord; warnings: string[] }
+  | { ok: false; issues: ValidationIssue[] };
+
+/** Like `createCustomMaterial`, but returns the problems instead of throwing (for the screen). */
+export function tryCreateCustomMaterial(input: CustomMaterialInput, existingIds: Iterable<string> = []): CustomMaterialOutcome {
+  try {
+    return { ok: true, ...createCustomMaterial(input, existingIds) };
+  } catch (error) {
+    if (error instanceof EngineInputError) return { ok: false, issues: error.issues };
+    throw error;
+  }
 }

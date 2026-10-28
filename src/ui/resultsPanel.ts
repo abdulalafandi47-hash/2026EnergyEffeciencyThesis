@@ -16,10 +16,11 @@ import type { WallInput } from '../engine';
 import type { MaterialRecord } from '../materials';
 import { buildReport, DEFAULT_REPORT_TITLE, renderHtml, renderJson, renderLayersCsv, renderMarkdown, reportFileBase } from '../report';
 import type { ReportInput } from '../report';
-import { h, show } from './dom';
+import { h, show, tableRegion } from './dom';
 import type { Child } from './dom';
 import { browserIo } from './io';
 import type { FileIo } from './io';
+import type { MaterialsPanel } from './materialsPanel';
 
 /** Results for one valid wall. */
 export interface ResultsData {
@@ -43,7 +44,7 @@ interface ResultsInput {
   stale: boolean;
 }
 
-export type TabId = 'results' | 'layers' | 'profile' | 'compare' | 'assumptions' | 'report' | 'configuration';
+export type TabId = 'results' | 'layers' | 'profile' | 'compare' | 'materials' | 'assumptions' | 'report' | 'configuration';
 
 export interface ResultsPanel {
   element: HTMLElement;
@@ -63,6 +64,7 @@ const TABS: Array<[TabId, string]> = [
   ['layers', 'Layers & temperatures'],
   ['profile', 'Temperature profile'],
   ['compare', 'Compare'],
+  ['materials', 'Materials'],
   ['assumptions', 'Assumptions & references'],
   ['report', 'Report'],
   ['configuration', 'Configuration'],
@@ -79,8 +81,27 @@ const arealCapacity = (jPerM2K: number): string => `${show(jPerM2K / 1000, 4)} k
 const signed = (value: number | null): string => (value === null ? '—' : Math.abs(value) < 1e-9 ? '0 %' : `${value > 0 ? '+' : ''}${show(value, 3)} %`);
 const DIRECTION_WORD = { outward: 'Outward · loss', inward: 'Inward · gain', none: 'None' } as const;
 
-export function createResultsPanel(options: { materials: readonly MaterialRecord[]; announce?: (text: string) => void; io?: FileIo }): ResultsPanel {
+/**
+ * The four quantities the brief asks to keep apart. Same wording as section 6 of
+ * docs/equations-and-assumptions.md (a test compares them).
+ */
+export const KEY_TERMS: ReadonlyArray<[string, string]> = [
+  ['Thermal conductivity λ (W/(m·K))', 'a property of a material. How easily heat conducts through it. Lower is better insulation. It can vary with density, moisture content, temperature and product.'],
+  ['Thermal resistance R (m²·K/W)', 'a property of a layer of given thickness: R = d/λ. Resistances in series add. Higher is better.'],
+  ['Thermal transmittance U (W/(m²·K))', 'a property of the whole assembly, including surface films: U = 1/R_total. It tells you the heat flow per m² per kelvin. Lower is better.'],
+  ['Heat capacity C (J/K) and areal heat capacity (J/(m²·K))', 'how much heat the material stores per kelvin. It is independent of how fast heat passes through. A heavy wall and a light wall can have the same U but very different heat capacity. Dynamic behaviour depends on both together with the boundary conditions.'],
+];
+
+export function createResultsPanel(options: {
+  /** The material list, or a function returning the current list (it grows when custom materials are added). */
+  materials: readonly MaterialRecord[] | (() => readonly MaterialRecord[]);
+  announce?: (text: string) => void;
+  io?: FileIo;
+  /** The Materials tab (database view and custom-material form), made by the editor. */
+  materialsPanel?: MaterialsPanel;
+}): ResultsPanel {
   const io = options.io ?? browserIo;
+  const materials = (): readonly MaterialRecord[] => (typeof options.materials === 'function' ? options.materials() : options.materials);
   let input: ResultsInput = { wall: null, views: [], analysis: null, draft: null, editorWarnings: [], stale: false };
   let active: TabId = 'results';
   let collapsed = false;
@@ -224,9 +245,8 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
     panel.replaceChildren(
       ...([
         stale(),
-        h(
-          'div',
-          { class: 'table-wrap' },
+        tableRegion(
+          'Layer table (scrolls sideways on narrow screens)',
           h(
             'table',
             { class: 'data-table', 'data-role': 'layer-table' },
@@ -314,7 +334,7 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
     const found: Comparison[] = [];
     const thicknesses = parseList(compareState.thicknessesText);
     if (!thicknesses.error) found.push(sweepLayerThickness(wall, thicknessLayer, thicknesses.values.map((mm) => mm / 1000)));
-    const chosen = options.materials.filter((m) => compareState.swapIds.has(m.id));
+    const chosen = materials().filter((m) => compareState.swapIds.has(m.id));
     if (chosen.length > 0) found.push(swapLayerMaterial(wall, swapLayer, chosen));
     const temperatures = parseList(compareState.temperaturesText);
     if (!temperatures.error) found.push(sweepOutsideTemperature(wall, temperatures.values));
@@ -328,7 +348,7 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
     return h(
       'div',
       { class: 'comparison', 'data-role': 'comparison' },
-      h('div', { class: 'table-wrap' }, h('table', { class: 'data-table', 'data-role': 'comparison-table' }, h('caption', {}, `${title}: changing ${valueLabel} only`), h('thead', {}, h('tr', {}, ...['Variant', 'What changed', 'U (W/(m²·K))', 'ΔU', 'R_total (m²·K/W)', 'Q̇ (W)', 'ΔQ̇', 'Heat capacity (kJ/(m²·K))', 'Data'].map((t) => h('th', { scope: 'col' }, t)))), h('tbody', {}, ...rows))),
+      tableRegion(`${title} comparison table`, h('table', { class: 'data-table', 'data-role': 'comparison-table' }, h('caption', {}, `${title}: changing ${valueLabel} only`), h('thead', {}, h('tr', {}, ...['Variant', 'What changed', 'U (W/(m²·K))', 'ΔU', 'R_total (m²·K/W)', 'Q̇ (W)', 'ΔQ̇', 'Heat capacity (kJ/(m²·K))', 'Data'].map((t) => h('th', { scope: 'col' }, t)))), h('tbody', {}, ...rows))),
       h('div', { class: 'chart-box small' }, chart),
       h('p', { class: 'caption' }, h('strong', {}, 'Held constant: '), comparison.heldConstant.join('; '), '. Percentages are relative to the current wall.', anyUnverified ? ' Some variants use illustrative or unverified material data: use the comparison to see trends, not as design values.' : ''),
     );
@@ -384,7 +404,7 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
     thicknessInput.addEventListener('input', runThickness);
 
     // 2. material swap
-    const materialBoxes = options.materials.map((m) => {
+    const materialBoxes = materials().map((m) => {
       const box = h('input', { type: 'checkbox', id: `cmp-m-${m.id}`, value: m.id });
       box.checked = compareState.swapIds.has(m.id);
       box.addEventListener('change', () => {
@@ -396,7 +416,7 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
     });
     const swapResult = h('div', { 'data-role': 'swap-material' });
     const runSwap = (): void => {
-      const chosen = options.materials.filter((m) => compareState.swapIds.has(m.id));
+      const chosen = materials().filter((m) => compareState.swapIds.has(m.id));
       swapResult.replaceChildren(chosen.length === 0 ? h('p', { class: 'note' }, 'Tick at least one material to compare.') : comparisonView(swapLayerMaterial(wall, swapLayer, chosen), `Material of layer ${swapLayer + 1}`, 'its material (same thickness)'));
     };
 
@@ -436,6 +456,8 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
       h('div', { class: 'assumptions' },
         h('h3', {}, 'Assumptions behind these numbers'),
         a ? h('ul', { 'data-role': 'engine-assumptions' }, ...a.result.assumptions.map((t) => h('li', {}, t))) : h('p', { class: 'note' }, 'Shown once a valid wall has been calculated.'),
+        h('h3', {}, 'Four quantities that are easy to confuse'),
+        h('ul', { 'data-role': 'key-terms' }, ...KEY_TERMS.map(([term, meaning]) => h('li', {}, h('strong', {}, term), `: ${meaning}`))),
         h('h3', {}, 'What the temperature overlay and arrows mean'),
         h('ul', {},
           h('li', {}, 'Colour = the temperature the calculation gives at that point in the wall, mapped linearly from the coldest to the warmest temperature in the wall (see the colour bar). It is a display of calculated numbers, not a separate model.'),
@@ -457,6 +479,18 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
         ),
       ),
     );
+  }
+
+  // ---- materials tab (made by the editor; kept, not rebuilt, so the form keeps what was typed) ----------------
+  function renderMaterials(): void {
+    const panel = panels.get('materials') as HTMLElement;
+    const host = options.materialsPanel;
+    if (!host) {
+      panel.replaceChildren(empty('The material database is not available here.'));
+      return;
+    }
+    if (host.element.parentElement !== panel) panel.replaceChildren(host.element);
+    host.render();
   }
 
   // ---- report tab ---------------------------------------------------------------------------------------------------------------
@@ -606,6 +640,7 @@ export function createResultsPanel(options: { materials: readonly MaterialRecord
       profile: renderProfile,
       compare: renderCompare,
       assumptions: renderAssumptions,
+      materials: renderMaterials,
       report: renderReport,
       configuration: () => undefined,
     })[active]();

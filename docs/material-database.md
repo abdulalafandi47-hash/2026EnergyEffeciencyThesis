@@ -41,14 +41,19 @@ Conductivity depends on density, moisture content, temperature and the specific 
 
 ## Custom materials
 
-`createCustomMaterial({ name, lambdaWPerMK, densityKgPerM3?, specificHeatJPerKgK?, category?, sourceNote? })`
+**On screen (since Stage 8):** results panel → **Materials** tab → "Add a custom material" (or the **＋ Custom material…** button under the layers in the sidebar). Enter the name, category, λ (W/(m·K)), optionally ρ and c_p, the value type (measured / declared / design / not stated), where the values come from, and the conditions they apply to. The new record appears in every layer's material list, in the comparison choices, in the database table and in reports, always labelled **user-defined**. A custom material that a layer uses cannot be removed until the layer uses another material.
+
+Custom materials last until the page is closed. **Save wall** stores them, complete, in the wall file (file version 2), and opening the file brings them back. Export the database (JSON or CSV) from the same tab.
+
+In code: `createCustomMaterial({ name, lambdaWPerMK, densityKgPerM3?, specificHeatJPerKgK?, category?, sourceNote?, valueType?, conditions? })` (or `tryCreateCustomMaterial`, which returns the problems instead of throwing)
 
 - values must be in SI units (convert first with `src/units`);
 - invalid input throws and lists every problem;
 - suspicious but valid numbers (for example λ = 40, or specific heat in kJ/(kg·K)) are returned as `warnings` for the interface to display;
-- ids are made unique (`custom-my-insulation`, `custom-my-insulation-2`, …) and the record is always `user-defined`.
+- ids are made unique (`custom-my-insulation`, `custom-my-insulation-2`, …) and the record is always `user-defined`;
+- names are limited to 80 characters, source notes and conditions to 500.
 
-Saving custom materials between sessions is a user-interface task (Stage 4).
+A wall file can only add `user-defined` records with ids starting `custom-`; a file claiming a `verified` record, or reusing a built-in id, is refused (`tests/persist.test.ts`).
 
 ## How to turn a record into a `verified` one
 

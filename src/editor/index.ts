@@ -25,7 +25,7 @@ export {
   setWidth,
 } from './draft';
 export { FIELD, layerField } from './fields';
-export { MAX_FILE_CHARS, MAX_LAYERS, MAX_TEXT_CHARS, parseDraft, serializeDraft, WALL_FILE_SCHEMA, WALL_FILE_VERSION } from './persist';
+export { MAX_CUSTOM_MATERIALS, MAX_FILE_CHARS, MAX_LAYERS, MAX_TEXT_CHARS, OLDEST_WALL_FILE_VERSION, parseDraft, serializeDraft, WALL_FILE_SCHEMA, WALL_FILE_VERSION } from './persist';
 export type { MaterialSnapshot, ParseDraftResult, WallFile } from './persist';
 export type { LayerFieldName } from './fields';
 export { formatNumber, parseNumberInput } from './parseNumber';

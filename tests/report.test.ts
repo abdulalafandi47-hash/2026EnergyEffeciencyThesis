@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { analyzeWall, sweepOutsideTemperature } from '../src/analysis';
 import { createInitialDraft, setLayerMaterial, setLayerThickness, setInsideTemperature, setOutsideTemperature, setSurfaceMode } from '../src/editor';
 import type { WallDraft } from '../src/editor';
-import { BUILT_IN_MATERIALS } from '../src/materials';
+import { BUILT_IN_MATERIALS, createCustomMaterial } from '../src/materials';
 import type { MaterialRecord } from '../src/materials';
 import {
   buildReport,
@@ -225,6 +225,20 @@ describe('what the report says about data status', () => {
     expect(verified.banners.some((b) => /illustrative or unverified/.test(b))).toBe(false);
     expect(verified.banners.some((b) => /surface resistances are unverified/.test(b))).toBe(true); // still unverified
     expect(verified.banners.some((b) => /not a dynamic or whole-building/.test(b))).toBe(true); // scope statement always present
+  });
+
+  it('a user-defined (custom) material adds its own warning; all-custom walls lose the illustrative warning', () => {
+    const board = createCustomMaterial({ name: 'Board', lambdaWPerMK: 0.031, sourceNote: 'datasheet' }).material;
+    const materials = [...BUILT_IN_MATERIALS, board];
+    const one = model({ materials, draft: setLayerMaterial(initial(), 'layer-3', board.id) });
+    expect(one.banners.some((b) => /entered by the user \(user-defined\)/.test(b))).toBe(true);
+    expect(one.banners.some((b) => /illustrative or unverified/.test(b))).toBe(true);
+    let all = initial();
+    for (const key of ['layer-1', 'layer-2', 'layer-3', 'layer-4']) all = setLayerMaterial(all, key, board.id);
+    const allCustom = model({ materials, draft: all });
+    expect(allCustom.banners.some((b) => /illustrative or unverified/.test(b))).toBe(false);
+    expect(allCustom.banners.some((b) => /user-defined/.test(b))).toBe(true);
+    expect(model().banners.some((b) => /entered by the user/.test(b))).toBe(false);
   });
 
   it('custom surface resistances are reported as user-defined and shown as typed', () => {

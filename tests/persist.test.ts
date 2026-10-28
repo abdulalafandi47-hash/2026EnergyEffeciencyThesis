@@ -16,7 +16,8 @@ import {
   WALL_FILE_SCHEMA,
 } from '../src/editor';
 import type { WallDraft } from '../src/editor';
-import { BUILT_IN_MATERIALS } from '../src/materials';
+import { BUILT_IN_MATERIALS, createCustomMaterial } from '../src/materials';
+import type { MaterialRecord } from '../src/materials';
 import { at } from './helpers/helpers';
 
 const initial = (): WallDraft => createInitialDraft(BUILT_IN_MATERIALS);
@@ -66,7 +67,8 @@ describe('save and load round trip', () => {
   it('the file says what it is and records the materials used', () => {
     const file = JSON.parse(serializeDraft(initial(), BUILT_IN_MATERIALS));
     expect(file.schema).toBe(WALL_FILE_SCHEMA);
-    expect(file.schemaVersion).toBe(1);
+    expect(file.schemaVersion).toBe(2);
+    expect(file.customMaterials).toEqual([]);
     expect(file.note).toMatch(/illustrative/i);
     expect(file.materialsUsed.map((m: { id: string }) => m.id).sort()).toEqual(['cement-plaster', 'clay-brick-solid', 'eps-slab', 'gypsum-plaster']);
     expect(file.materialsUsed.every((m: { status: string }) => m.status === 'illustrative')).toBe(true);
@@ -119,7 +121,7 @@ describe('bad files are refused with a clear message and never throw', () => {
     expect(refused(edited((f) => (f.schemaVersion = 1.5)))).toMatch(/version/);
     expect(refused(edited((f) => (f.schemaVersion = 0)))).toMatch(/version/);
     expect(refused(edited((f) => (f.schemaVersion = '1')))).toMatch(/version/);
-    expect(refused(edited((f) => (f.schemaVersion = 2)))).toMatch(/newer/);
+    expect(refused(edited((f) => (f.schemaVersion = 3)))).toMatch(/newer/);
   });
 
   it('a file that is too large', () => {
@@ -214,5 +216,88 @@ describe('random damage never crashes the reader', () => {
         expect(result.error.length).toBeGreaterThan(5);
       }
     }
+  });
+});
+
+describe('custom materials travel with the wall (file version 2)', () => {
+  const custom = (name: string, extra: Partial<Parameters<typeof createCustomMaterial>[0]> = {}): MaterialRecord =>
+    createCustomMaterial({ name, lambdaWPerMK: 0.031, densityKgPerM3: 30, specificHeatJPerKgK: 1400, sourceNote: 'Datasheet X, table 2', valueType: 'declared', conditions: 'dry, 10 °C', ...extra }).material;
+  const withCustom = (): { draft: WallDraft; customs: MaterialRecord[] } => {
+    const customs = [custom('Board A'), custom('Board B', { lambdaWPerMK: 0.022 })];
+    const draft = setLayerMaterial(initial(), 'layer-3', customs[0]?.id ?? '');
+    return { draft, customs };
+  };
+  const save = (draft: WallDraft, customs: MaterialRecord[]): string => serializeDraft(draft, [...BUILT_IN_MATERIALS, ...customs], customs);
+
+  it('round trip: the custom records come back complete and the wall calculates identically', () => {
+    const { draft, customs } = withCustom();
+    const result = parse(save(draft, customs));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.customMaterials).toEqual(customs);
+    expect(result.warnings).toEqual([]);
+    const before = buildWall(draft, [...BUILT_IN_MATERIALS, ...customs]);
+    const after = buildWall(result.draft, [...BUILT_IN_MATERIALS, ...result.customMaterials]);
+    expect(before.ok).toBe(true);
+    expect(after.wall).toEqual(before.wall);
+  });
+
+  it('a version-1 file (no custom materials) still opens', () => {
+    const result = parse(edited((f) => { f.schemaVersion = 1; delete f.customMaterials; }));
+    expect(result.ok && result.customMaterials).toEqual([]);
+  });
+
+  it('without its custom materials, a wall that uses one is reported, not silently changed', () => {
+    const { draft, customs } = withCustom();
+    const text = JSON.parse(save(draft, customs));
+    delete text.customMaterials;
+    const result = parse(JSON.stringify(text));
+    expect(result.ok && result.warnings.join(' ')).toMatch(/custom-board-a/);
+  });
+
+  it('a file cannot add a "verified" (or any non-user-defined) record, reuse a built-in id, or repeat an id', () => {
+    const { draft, customs } = withCustom();
+    const base = JSON.parse(save(draft, customs));
+    const variant = (change: (f: any) => void): string => { const f = JSON.parse(JSON.stringify(base)); change(f); return JSON.stringify(f); };
+    const refusedWith = (text: string, pattern: RegExp): void => {
+      const r = parse(text);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toMatch(pattern);
+    };
+    refusedWith(variant((f) => { f.customMaterials[0].status = 'illustrative'; f.customMaterials[0].valueType = 'unspecified'; f.customMaterials[0].source = { type: 'none', citation: 'x' }; }), /may only add user-defined/);
+    refusedWith(variant((f) => { f.customMaterials[0].status = 'verified'; }), /not a valid material record|may only add user-defined/);
+    refusedWith(variant((f) => { f.customMaterials[0].id = 'eps-slab'; }), /id "eps-slab"; custom material ids start with "custom-"/);
+    refusedWith(variant((f) => { f.customMaterials[0].id = 'my-board'; }), /custom material ids start with "custom-"/);
+    // A program whose own list already holds a "custom-" id refuses a file that reuses it.
+    const clash = parseDraft(save(draft, customs), [...BUILT_IN_MATERIALS, { ...customs[0]!, status: 'illustrative' as const }]);
+    expect(clash.ok).toBe(false);
+    if (!clash.ok) expect(clash.error).toMatch(/repeats the id "custom-board-a"/);
+    refusedWith(variant((f) => { f.customMaterials[1].id = f.customMaterials[0].id; }), /repeats the id/);
+    refusedWith(variant((f) => { f.customMaterials[0].lambdaWPerMK = -1; }), /not a valid material record/);
+    refusedWith(variant((f) => { f.customMaterials[0].units.conductivity = 'BTU'; }), /not a valid material record/);
+    refusedWith(variant((f) => { f.customMaterials = {}; }), /must be a list/);
+    refusedWith(variant((f) => { f.customMaterials[0].name = 'n'.repeat(81); }), /too long/);
+    refusedWith(variant((f) => { f.customMaterials = Array.from({ length: 101 }, (_, i) => ({ ...f.customMaterials[0], id: `custom-x-${i}` })); }), /at most 100/);
+  });
+
+  it('extra fields in a custom record are dropped', () => {
+    const { draft, customs } = withCustom();
+    const f = JSON.parse(save(draft, customs));
+    f.customMaterials[0].evil = '<script>';
+    f.customMaterials[0].source.evil = 1;
+    const result = parse(JSON.stringify(f));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Object.keys(result.customMaterials[0] ?? {})).not.toContain('evil');
+      expect(Object.keys(result.customMaterials[0]?.source ?? {})).not.toContain('evil');
+    }
+  });
+
+  it('a changed custom conductivity is reported against the snapshot', () => {
+    const { draft, customs } = withCustom();
+    const f = JSON.parse(save(draft, customs));
+    f.customMaterials[0].lambdaWPerMK = 0.05;
+    const result = parse(JSON.stringify(f));
+    expect(result.ok && result.warnings.join(' ')).toMatch(/Board A.*differs/);
   });
 });

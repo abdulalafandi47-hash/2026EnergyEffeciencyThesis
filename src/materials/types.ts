@@ -130,6 +130,8 @@ export interface CustomMaterialInput {
   sourceNote?: string;
   /** What kind of value this is. Defaults to "unspecified". */
   valueType?: ThermalValueType;
+  /** Conditions the values apply to (moisture, mean temperature, product grade …). Free text. */
+  conditions?: string;
 }
 
 export interface MaterialFilter {

@@ -13,7 +13,7 @@ The application models **one multilayer wall**: a stack of homogeneous layers wi
 | Top bar | sidebar toggle (☰ Inputs), title, "Steady-state wall analysis" chip, **Save wall** / **Open wall…**, data-policy note (click to read) |
 | Sidebar (left, collapsible) | validity badge; 1 Wall dimensions; 2 Layers (material, thickness, reorder, remove, Inspect); 3 Boundary conditions and surface resistances |
 | Viewport (centre, about 74 % of the main column's height; the picture alone about 64 %) | toolbar ribbon, 3D picture with ground grid, layer list and inspector (fold-away overlay), colour bar, status bar |
-| Results panel (bottom, collapsible and enlargeable) | tabs: Results · Layers & temperatures · Temperature profile · Compare · Assumptions & references · **Report** (Stage 7, see `docs/report-format.md`) · Configuration; headline numbers always visible |
+| Results panel (bottom, collapsible and enlargeable) | tabs: Results · Layers & temperatures · Temperature profile · Compare · **Materials** (Stage 8) · Assumptions & references · **Report** (Stage 7, see `docs/report-format.md`) · Configuration; headline numbers always visible |
 
 Hiding the sidebar gives the picture the full window width; collapsing the results panel gives it about 710 px of height at 900 px window height. On phones the 3D view comes first, then results, then the inputs; the toolbar scrolls sideways in one row and the layer list starts folded.
 
@@ -40,7 +40,8 @@ Arrows run through the wall from the warm side to the cold side (outward for hea
 - **Layers & temperatures:** the layer-by-layer resistance table (d, λ, R = d/λ, share of R_total), the temperature at each side of every layer, the drop across it, and the two surface-film rows.
 - **Temperature profile:** SVG chart of temperature against distance from the interior face, with layer bands, plus the same numbers as a table. Straight lines inside each layer; dashed vertical drops at the two air films.
 - **Compare:** three one-change comparisons starting from the current wall (A thickness of one layer, B material of one layer, C outside air temperature), each with a table (U, ΔU, R_total, Q̇ with direction, ΔQ̇, heat capacity, data status), a bar chart, and an explicit list of what is held constant. Lists are typed with spaces between values (a comma is a decimal mark).
-- **Assumptions & references:** the engine's assumption list, what the overlay and arrows mean, what the results are not (not dynamic, not whole-building, not annual, not a compliance check), and the status of method and data.
+- **Materials (Stage 8):** every material record (values, data status, value type, source, conditions, limitations, which layers use it), search and status filter, export as JSON or CSV, and the form for adding custom (user-defined) materials. See `docs/material-database.md`.
+- **Assumptions & references:** the engine's assumption list, the four easily confused quantities (λ, R, U, C), what the overlay and arrows mean, what the results are not (not dynamic, not whole-building, not annual, not a compliance check), and the status of method and data.
 - **Configuration:** the validity summary and the exact SI input given to the engine.
 
 While the editor has errors, results, overlay and arrows keep showing the **last valid wall** and are marked as such.
@@ -68,7 +69,7 @@ The calculation engine itself was **not changed**. `tests/architecture.test.ts` 
 - Steady state only: no heat storage, solar gain, ventilation or hourly weather. The headline energy figure is power × time under constant conditions.
 - Every material value is illustrative; all thermal results inherit that and carry the warning. Nothing is an approved Cypriot design value and no compliance is claimed.
 - The overlay and arrows are a display of the same calculation; there is no separate "thermal simulation" behind them.
-- Chromium with software rendering was tested. Firefox, Safari, real GPUs and touch devices were not. Screen-reader use was designed in (labels, roles, live regions, table equivalents of both charts) but not audited.
+- Chromium with software rendering was tested. Firefox, Safari, real GPUs and touch devices were not. Screen-reader use was designed in (labels, roles, live regions, table equivalents of both charts); in Stage 8 an automated axe-core scan found no serious problems, but no screen-reader user has tried it. The full list is in `docs/limitations.md`.
 - The `viewer3d/WallViewer.ts` shell has no unit-test coverage; it is verified by the browser script.
 
 ## To confirm with your thesis supervisor (new questions)
