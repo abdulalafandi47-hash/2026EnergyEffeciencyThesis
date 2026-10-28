@@ -81,4 +81,4 @@ docs/             Documentation (see the list below).
 
 ## Preview without installing anything
 
-Pushes to the stage branches run `.github/workflows/preview-pages.yml`, which tests, builds and publishes the app to the `gh-pages` branch. With GitHub Pages switched on (repository Settings → Pages → Deploy from a branch → `gh-pages`, `/ (root)`), it is at `https://abdulalafandi47-hash.github.io/2026EnergyEffeciencyThesis/`. GitHub only serves Pages from a **public** repository on a free plan, so anyone with the link can open it. The app sends no data anywhere.
+Every push to `master` runs `.github/workflows/preview-pages.yml`, which tests, builds and publishes the app to the `gh-pages` branch. With GitHub Pages switched on (repository Settings → Pages → Deploy from a branch → `gh-pages`, `/ (root)`), it is at `https://abdulalafandi47-hash.github.io/2026EnergyEffeciencyThesis/`. GitHub only serves Pages from a **public** repository on a free plan, so anyone with the link can open it. The app sends no data anywhere.
