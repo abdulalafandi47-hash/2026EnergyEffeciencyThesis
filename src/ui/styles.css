@@ -22,8 +22,9 @@
   --exterior: #7dbdff;
   --focus: #ff9f0a;
   --heat: #ffa94d;
-  --sidebar-w: 360px;
-  --results-h: clamp(190px, 25vh, 290px);
+  /* The 3D view gets about 70 % of the workspace on common desktop screens: a narrow sidebar and a compact results strip. */
+  --sidebar-w: clamp(250px, 18vw, 300px);
+  --results-h: clamp(120px, 14vh, 190px);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -123,12 +124,12 @@ summary { cursor: pointer; font-weight: 600; }
 
 /* ---- viewport ---- */
 .viewport { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; min-width: 0; background: #0a0e13; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 4px 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 3px 8px; padding: 3px 6px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .tool-group { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-button.tool { padding: 1px 8px; min-height: 26px; font-size: 0.78rem; }
+button.tool { padding: 1px 7px; min-height: 26px; font-size: 0.78rem; }
 button.tool[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 700; }
 .tool-select { min-height: 26px; padding: 0 4px; font-size: 0.78rem; }
-.chip { display: inline-flex; gap: 4px; align-items: center; font-size: 0.76rem; font-weight: 600; color: var(--text); padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); cursor: pointer; white-space: nowrap; }
+.chip { display: inline-flex; gap: 4px; align-items: center; font-size: 0.76rem; font-weight: 600; color: var(--text); padding: 1px 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); cursor: pointer; white-space: nowrap; }
 .chip:has(input:checked) { border-color: var(--accent); background: #16314d; }
 .chip input { min-height: 0; width: 1em; height: 1em; margin: 0; }
 .stage-wrap { position: relative; min-height: 0; min-width: 0; background: radial-gradient(ellipse at 50% 35%, #1b2431 0%, #0c1117 70%); }
@@ -165,10 +166,10 @@ button.tool[aria-pressed="true"] { background: var(--accent); color: var(--accen
 .colorbar-gradient { height: 12px; border-radius: 3px; margin: 4px 0 2px; border: 1px solid var(--border); }
 .colorbar-scale { display: flex; justify-content: space-between; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 .colorbar-note { font-size: 0.68rem; color: var(--muted); margin-top: 3px; }
-.statusbar { display: flex; flex-wrap: wrap; gap: 0 14px; padding: 2px 10px; font-size: 0.7rem; color: var(--muted); background: var(--surface); border-top: 1px solid var(--border); }
+.statusbar { display: flex; flex-wrap: wrap; gap: 0 12px; padding: 2px 10px; font-size: 0.7rem; color: var(--muted); background: var(--surface); border-top: 1px solid var(--border); }
 
 /* ---- results panel ---- */
-.results-panel { display: flex; flex-direction: column; height: var(--results-h); min-height: 0; background: var(--bg-2); border-top: 2px solid var(--border); }
+.results-panel { display: flex; flex-direction: column; height: var(--results-h); min-height: 0; min-width: 0; background: var(--bg-2); border-top: 2px solid var(--border); }
 .results-panel.enlarged { height: 56vh; }
 .results-panel.collapsed { height: auto; }
 .results-head { display: flex; align-items: center; gap: 8px; padding: 0 8px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
@@ -177,8 +178,16 @@ button.tab { border: 0; border-bottom: 2px solid transparent; background: none; 
 button.tab[aria-selected="true"] { color: var(--text); font-weight: 700; border-bottom-color: var(--accent); }
 .headline { margin-left: auto; font-size: 0.78rem; color: var(--text); font-variant-numeric: tabular-nums; }
 .results-actions { display: flex; gap: 4px; }
+/* Results tab (expanded): one header line, so the tiles below have room; the tab list scrolls sideways if needed. */
+.results-panel[data-tab="results"]:not(.collapsed) .results-head { flex-wrap: nowrap; }
+.results-panel[data-tab="results"]:not(.collapsed) .tablist { flex: 0 1 auto; min-width: 0; }
+.results-panel[data-tab="results"]:not(.collapsed) .headline { flex: 0 1 auto; min-width: 8ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.results-actions { flex: none; }
 .results-body { flex: 1; min-height: 0; overflow: auto; }
 .tabpanel { padding: 6px 10px 10px; }
+.results-panel:not(.enlarged) #panel-results { padding-top: 4px; }
+.results-panel:not(.enlarged) .kpi-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.results-panel:not(.enlarged) .kpi-value { font-size: 1.1rem; white-space: nowrap; }
 
 /* ---- materials tab ---- */
 .materials-layout { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: 14px; align-items: start; }
@@ -200,10 +209,19 @@ iframe.report-preview { width: 100%; height: 340px; border: 1px solid var(--bord
 .kpi-value { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.25; }
 .kpi-unit { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
 .kpi-sub { font-size: 0.7rem; color: var(--muted); overflow-wrap: anywhere; }
+/* Compact strip: the formula lines are kept in each tile's tooltip and shown in full when the panel is enlarged. */
+.results-panel:not(.enlarged) .kpi-sub { display: none; }
+.results-panel:not(.enlarged) .kpis { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.viewer-axis { position: absolute; left: 0; top: 0; font: 700 0.8rem/1 ui-monospace, Consolas, monospace; text-shadow: 0 0 3px #000, 0 0 3px #000; }
 .direction { display: inline-block; white-space: nowrap; font-size: 0.72rem; font-weight: 700; padding: 0 8px; border-radius: 999px; border: 1px solid currentColor; margin: 2px 0; }
 .direction-outward { color: var(--heat); }
 .direction-inward { color: var(--exterior); }
 .direction-none { color: var(--muted); }
+/* Compact strip: the direction sits on the value's line, so magnitude and direction are both always visible. */
+.kpi { position: relative; }
+.results-panel:not(.enlarged) .kpi[data-kpi="heat-transfer"] { display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; }
+.results-panel:not(.enlarged) .kpi[data-kpi="heat-transfer"] .kpi-label { flex: 0 0 100%; }
+.results-panel:not(.enlarged) .kpi[data-kpi="heat-transfer"] .direction { font-size: 0.66rem; padding: 0 6px; margin: 0; }
 .stale-note { color: var(--warn); background: var(--warn-bg); border-left: 4px solid var(--warn); padding: 3px 10px; margin: 0 0 6px; font-size: 0.8rem; }
 .empty-note { padding: 12px 0; }
 .warnings, .problems { margin: 6px 0; padding-left: 20px; font-size: 0.82rem; }

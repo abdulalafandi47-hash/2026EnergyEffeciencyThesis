@@ -9,7 +9,9 @@ export type ViewPreset =
   /** Looking at the exterior face from outside. */
   | 'exterior'
   /** Looking at the cut edge: layers appear side by side, interior on the left. */
-  | 'section';
+  | 'section'
+  /** Plan view from above: the layer sequence seen from the top, interior on the left. */
+  | 'top';
 
 export interface ViewerHandlers {
   /** Called when the user clicks a layer in the 3D view (or empty space → null). */
@@ -33,6 +35,8 @@ export interface WallViewer {
   /** Shows arrows for the direction of heat flow; null or 'none' hides them. */
   setHeatFlow(direction: FlowDirection | null): void;
   setGridVisible(visible: boolean): void;
+  /** Shows or hides the x/y/z coordinate axes. */
+  setAxesVisible(visible: boolean): void;
   /** What a left-drag does: rotate the model (default) or pan the view. */
   setNavigationMode(mode: NavigationMode): void;
   /** Moves the camera closer (factor < 1) or farther (factor > 1). */

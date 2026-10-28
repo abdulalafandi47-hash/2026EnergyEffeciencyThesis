@@ -33,7 +33,8 @@ const chooseValue = (select: HTMLSelectElement, value: string): void => {
 };
 const click = (node: Element | null | undefined): void => void node?.dispatchEvent(new Event('click', { bubbles: true }));
 const byLabel = (label: string): HTMLButtonElement => [...root.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === label || b.textContent === label) as HTMLButtonElement;
-const legend = (): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('.legend-item')];
+/** Layer entries of the 3D panel's list (the first entry, "Whole wall", is not a layer). */
+const legend = (): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('.legend-item[data-layer-id]')];
 const pressed = (): string[] => legend().filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.layerId ?? '');
 const notice = (): string => root.querySelector('.viewer-notice')?.textContent ?? '';
 const checkbox = (id: string): HTMLInputElement => document.getElementById(id) as HTMLInputElement;
@@ -216,9 +217,12 @@ describe('display controls', () => {
     expect(legend()[1]?.textContent).not.toContain('face');
   });
 
-  it('the panel says colours are categories, not temperatures, and that this is not a thermal result', () => {
-    expect(root.querySelector('#viewer')?.textContent).toContain('Colours identify material categories only; they are not temperatures');
-    expect(root.querySelector('#viewer')?.textContent).toContain('geometry, not a thermal result');
+  it('the panel says what the colours mean in both modes, and that arrows show direction only', () => {
+    const text = root.querySelector('#viewer')?.textContent ?? '';
+    expect(text).toContain('With the thermal overlay on, colours are the calculated steady-state temperatures');
+    expect(text).toContain('with it off, colours identify material categories only');
+    expect(text).toContain('Arrows show only the direction of heat flow');
+    expect(text).not.toContain('they are not temperatures'); // the old sentence was wrong while the overlay is on
   });
 });
 

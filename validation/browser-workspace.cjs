@@ -76,9 +76,12 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   // ---------- layout ----------
   const g = await page.evaluate(() => { const r = (s) => document.querySelector(s).getBoundingClientRect(); return { col: r('.stage-column'), vp: r('#viewer'), stage: r('.viewer-stage'), sidebar: r('#sidebar'), results: r('#results'), top: r('.topbar') }; });
   check('dark theme by default', await page.evaluate(() => getComputedStyle(document.body).backgroundColor === 'rgb(11, 15, 20)'));
-  check('3D viewport takes 70-80 % of the main column height', g.vp.height / g.col.height >= 0.7 && g.vp.height / g.col.height <= 0.82, `${(100 * g.vp.height / g.col.height).toFixed(0)} %`);
-  check('3D picture alone is at least 60 % of the main column height', g.stage.height / g.col.height >= 0.6, `${(100 * g.stage.height / g.col.height).toFixed(0)} %`);
-  check('sidebar is a compact left column (<= 380 px)', g.sidebar.width <= 380 && g.sidebar.left === 0);
+  // Share of the whole workspace (window below the top bar), sidebar shown.
+  const workspaceArea = 1440 * (900 - g.top.height);
+  const vpShare = (g.vp.width * g.vp.height) / workspaceArea;
+  check('3D viewport takes 70-80 % of the workspace (sidebar shown)', vpShare >= 0.7 && vpShare <= 0.8, `${(100 * vpShare).toFixed(1)} %`);
+  check('3D picture alone is at least 60 % of the workspace', (g.stage.width * g.stage.height) / workspaceArea >= 0.6, `${(100 * (g.stage.width * g.stage.height) / workspaceArea).toFixed(1)} %`);
+  check('sidebar is a compact left column (<= 320 px)', g.sidebar.width <= 320 && g.sidebar.left === 0, `${Math.round(g.sidebar.width)} px`);
   check('results panel is a compact bottom panel (<= 30 % of the height)', g.results.height / g.col.height <= 0.3, `${(100 * g.results.height / g.col.height).toFixed(0)} %`);
   check('page itself does not scroll (workspace fills the window)', await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1));
   await page.screenshot({ path: OUT + '/workspace.png' });
@@ -91,13 +94,13 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   await page.screenshot({ path: OUT + '/workspace-sidebar-hidden.png' });
   await page.click('[data-role="sidebar-toggle"]');
   await settle(500);
-  check('showing the sidebar restores it', (await page.locator('#sidebar').boundingBox()).width > 300);
+  check('showing the sidebar restores it', (await page.locator('#sidebar').boundingBox()).width >= 250);
 
   // collapse the results panel
   await page.click('[data-role="collapse"]');
   await settle(400);
   const tall = await stage.boundingBox();
-  check('collapsing the results panel gives the picture more height', tall.height > g.stage.height + 150, `${Math.round(tall.height)} px`);
+  check('collapsing the (already compact) results panel gives the picture more height', tall.height >= g.stage.height + 50, `${Math.round(tall.height)} px`);
   check('headline numbers stay visible when collapsed', (await page.locator('[data-role="headline"]').innerText()).includes('W/(m²·K)'));
   await page.click('[data-role="collapse"]');
   await settle(400);
@@ -105,7 +108,7 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   // ---------- 3D drawing and interaction ----------
   check('editor usable and 3D canvas present', (await page.locator('#sidebar li.layer').count()) === 4 && (await page.locator('canvas.viewer-canvas').count()) === 1);
   const aria = await page.getAttribute('canvas.viewer-canvas', 'aria-label');
-  check('canvas has a text alternative listing layers and true thicknesses', aria.includes('4 layers') && aria.includes('80 mm') && aria.includes('not temperatures'));
+  check('canvas has a text alternative listing layers and true thicknesses', aria.includes('4 layers') && aria.includes('80 mm') && aria.includes('colours are calculated steady-state temperatures'));
   check('thickness exaggeration is disclosed on screen', (await page.locator('[data-role="scale-note"]').innerText()).includes('5× larger'));
   check('ground grid is on, with its spacing in the status bar', (await page.locator('[data-role="statusbar"]').innerText()).includes('Grid: 1 m'));
   const base = await shot();
@@ -141,19 +144,19 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   let box = await stage.boundingBox();
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.55);
   await settle(400);
-  check('clicking a layer in 3D selects it in the list', (await page.locator('.legend-item[aria-pressed="true"]').count()) === 1, (await page.locator('.legend-item[aria-pressed="true"]').innerText().catch(() => '')).replace(/\n/g, ' '));
+  check('clicking a layer in 3D selects it in the list', (await page.locator('.legend-item[data-layer-id][aria-pressed="true"]').count()) === 1, (await page.locator('.legend-item[data-layer-id][aria-pressed="true"]').innerText().catch(() => '')).replace(/\n/g, ' '));
   check('inspector shows its calculated temperatures', (await page.locator('.inspector').innerText()).includes('calculated, steady state'));
   check('selected layer card is highlighted in the sidebar', (await page.locator('#sidebar li.layer.selected').count()) === 1);
   check('selection changes the 3D picture', (await diff(page, base, await shot())) > CHANGED);
   await page.screenshot({ path: OUT + '/selected.png' });
-  await page.locator('.legend-item[aria-pressed="true"]').click(); await settle(400);
+  await page.locator('.legend-item[data-layer-id][aria-pressed="true"]').click(); await settle(400);
   check('deselecting restores the picture', (await diff(page, base, await shot())) < SAME);
-  await page.locator('.legend-item').nth(2).click();
+  await page.locator('.legend-item[data-layer-id]').nth(2).click();
   check('legend click selects layer 3', (await page.locator('#sidebar li.layer.selected .pos').innerText()) === 'Layer 3');
   await page.locator('[aria-label="Inspect layer 1 in the 3D view"]').click();
-  check('card Inspect button switches selection', (await page.locator('.legend-item[aria-pressed="true"]').innerText()).includes('1. Gypsum'));
+  check('card Inspect button switches selection', (await page.locator('.legend-item[data-layer-id][aria-pressed="true"]').innerText()).includes('1. Gypsum'));
   await page.locator('[aria-label="Inspect layer 1 in the 3D view"]').click();
-  check('Inspect toggles off', (await page.locator('.legend-item[aria-pressed="true"]').count()) === 0);
+  check('Inspect toggles off', (await page.locator('.legend-item[data-layer-id][aria-pressed="true"]').count()) === 0);
 
   // exploded, views
   await page.check('#v-exploded'); await settle(1200);
@@ -163,15 +166,33 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   await page.screenshot({ path: OUT + '/exploded.png' });
   await page.uncheck('#v-exploded'); await settle(1200);
   const views = {};
-  for (const [name, label] of [['iso', 'Show the oblique 3D view'], ['interior', 'Look at the interior face'], ['exterior', 'Look at the exterior face'], ['section', 'Look at the cut edge, showing the layers side by side']]) {
+  for (const [name, label] of [['iso', 'Show the oblique 3D view'], ['interior', 'Look at the interior face'], ['exterior', 'Look at the exterior face'], ['section', 'Look at the cut edge, showing the layers side by side'], ['top', 'Plan view from above']]) {
     await page.locator(`button[aria-label="${label}"]`).click(); await settle(450); views[name] = await shot();
   }
   const names = Object.keys(views); let allDifferent = true;
   for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) if ((await diff(page, views[names[i]], views[names[j]])) < CHANGED) allDifferent = false;
-  check('four camera views give four different pictures', allDifferent);
+  check('five camera views give five different pictures', allDifferent);
+  // Top (plan) view: interior on the left, exterior on the right, as stated.
+  await page.locator('button[aria-label="Plan view from above"]').click(); await settle(450);
+  const faceX = await page.evaluate(() => { const x = (s) => { const b = document.querySelector(s).getBoundingClientRect(); return b.x + b.width / 2; }; return { i: x('.viewer-face-interior'), e: x('.viewer-face-exterior') }; });
+  check('Top view: interior face on the left, exterior on the right', faceX.i < faceX.e, `${Math.round(faceX.i)} < ${Math.round(faceX.e)}`);
+  await page.screenshot({ path: OUT + '/top.png' });
   await page.screenshot({ path: OUT + '/section.png' });
   await page.locator('button[aria-label="Reset to the 3D view"]').click(); await settle(450);
   check('Reset returns to the original view', (await diff(page, views.iso, await shot())) < SAME);
+
+  // coordinate axes: drawn, labelled, and switchable
+  const withAxes = await shot();
+  const axisLabels = await page.evaluate(() => [...document.querySelectorAll('.viewer-axis')].map((e) => ({ text: e.textContent, hidden: e.hidden })));
+  check('axis letters x, y and z are shown', axisLabels.map((a) => a.text).join('') === 'xyz' && axisLabels.every((a) => !a.hidden));
+  const red = await countPixels(page, withAxes, 'r > 200 && g < 110 && b < 100');
+  const green = await countPixels(page, withAxes, 'g > 150 && r < 120 && b < 120');
+  check('the x (red) and y (green) arrows are drawn', red > 30 && green > 30, `red ${red} px, green ${green} px`);
+  await page.uncheck('#v-axes'); await settle(400);
+  const noAxes = await shot();
+  check('switching the axes off removes them from the picture', (await diff(page, withAxes, noAxes)) > 0.0003 && (await countPixels(page, noAxes, 'g > 150 && r < 120 && b < 120')) < green / 3);
+  check('…and their letters', await page.evaluate(() => [...document.querySelectorAll('.viewer-axis')].every((e) => e.hidden)));
+  await page.check('#v-axes'); await settle(400);
 
   // navigation: keyboard, mouse, zoom buttons, pan mode
   await page.focus('canvas.viewer-canvas');
@@ -187,7 +208,7 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   await page.mouse.move(box.x + box.width * 0.35, box.y + box.height * 0.5); await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.35 + 90, box.y + box.height * 0.5 + 10, { steps: 6 }); await page.mouse.up(); await settle(400);
   const dragged = await shot();
-  check('mouse drag rotates and does not select a layer', (await diff(page, views.iso, dragged)) > CHANGED && (await page.locator('.legend-item[aria-pressed="true"]').count()) === 0);
+  check('mouse drag rotates and does not select a layer', (await diff(page, views.iso, dragged)) > CHANGED && (await page.locator('.legend-item[data-layer-id][aria-pressed="true"]').count()) === 0);
   await page.mouse.wheel(0, -400); await settle(400);
   check('mouse wheel zooms', (await diff(page, dragged, await shot())) > CHANGED);
   await page.click('[aria-label="Reset to the 3D view"]'); await settle(450);
@@ -203,7 +224,7 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   const panStart = await shot();
   await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.6); await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.4 - 120, box.y + box.height * 0.6 - 20, { steps: 6 }); await page.mouse.up(); await settle(400);
-  check('in Pan mode a drag moves the view (and still does not select)', (await diff(page, panStart, await shot())) > CHANGED && (await page.locator('.legend-item[aria-pressed="true"]').count()) === 0);
+  check('in Pan mode a drag moves the view (and still does not select)', (await diff(page, panStart, await shot())) > CHANGED && (await page.locator('.legend-item[data-layer-id][aria-pressed="true"]').count()) === 0);
   await page.click('[aria-label="Orbit mode: dragging rotates the model"]');
   await page.click('[aria-label="Reset to the 3D view"]'); await settle(450);
 
@@ -248,15 +269,15 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   await page.fill('#f-layer-layer-3-thickness', '160'); await settle(1300);
   check('changing a thickness changes the 3D model', (await diff(page, t0, await shot())) > CHANGED);
   check('...and the results (thicker insulation lowers U)', Number(await kpi('u-value')) < Number(u0));
-  check('...and the legend shows the new TRUE thickness', (await page.locator('.legend-item').nth(2).innerText()).includes('160 mm'));
+  check('...and the legend shows the new TRUE thickness', (await page.locator('.legend-item[data-layer-id]').nth(2).innerText()).includes('160 mm'));
   await page.fill('#f-layer-layer-3-thickness', '80'); await settle(1300);
   await page.fill('#f-outsideTemperature', '35'); await settle(900);
   check('heat gain: direction flips to inward and the numbers stay positive', (await page.locator('[data-role="direction"]').innerText()).includes('Inward') && Number(await kpi('heat-transfer')) > 0);
   check('heat gain: colour bar range follows (20 to 35)', (await page.locator('.colorbar-scale').innerText()).replace(/\s/g, '') === '2027.535');
   await page.fill('#f-outsideTemperature', '5'); await settle(900);
-  const order0 = await page.locator('.legend-text').allInnerTexts();
+  const order0 = await page.locator('.legend-item[data-layer-id] .legend-text').allInnerTexts();
   await page.locator('[aria-label="Move layer 2 toward the exterior"]').click(); await settle(1000);
-  const order1 = await page.locator('.legend-text').allInnerTexts();
+  const order1 = await page.locator('.legend-item[data-layer-id] .legend-text').allInnerTexts();
   check('reordering a layer reorders the 3D legend and changes U? (it must not)', order0[1] !== order1[1] && (await kpi('u-value')) === u0);
 
   // ---------- invalid input ----------

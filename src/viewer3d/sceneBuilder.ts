@@ -12,7 +12,7 @@
  */
 import * as THREE from 'three';
 import { temperatureFraction, thermalRgb } from '../geometry';
-import type { FlowDirection, GridSpec, ThermalOverlay, WallLayout } from '../geometry';
+import type { AxesSpec, FlowDirection, GridSpec, ThermalOverlay, WallLayout } from '../geometry';
 
 interface Target {
   x: number;
@@ -257,6 +257,35 @@ export function syncHeatFlow(scene: WallScene, layout: WallLayout, direction: Fl
     }
   }
   scene.flow.userData = { direction, count: rows * cols };
+}
+
+/**
+ * The x/y/z coordinate axes (from `axesSpec`) as three arrows. They are drawn on top of
+ * everything (no depth test) so the wall never hides them; they are a display aid only.
+ */
+export function buildAxes(spec: AxesSpec): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'axes';
+  const origin = new THREE.Vector3(...spec.origin);
+  for (const axis of spec.axes) {
+    const arrow = new THREE.ArrowHelper(new THREE.Vector3(...axis.direction), origin, spec.lengthM, axis.color, spec.lengthM * 0.14, spec.lengthM * 0.07);
+    arrow.name = `axis-${axis.id}`;
+    arrow.renderOrder = 10;
+    for (const part of [arrow.line, arrow.cone]) {
+      const material = part.material as THREE.Material;
+      material.depthTest = false;
+      material.transparent = true;
+      part.renderOrder = 10;
+    }
+    group.add(arrow);
+  }
+  return group;
+}
+
+export function disposeAxes(group: THREE.Group): void {
+  for (const child of group.children) {
+    if (child instanceof THREE.ArrowHelper) child.dispose();
+  }
 }
 
 /** A subtle ground grid under the wall (metric spacing from `gridSpec`). */

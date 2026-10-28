@@ -7,7 +7,7 @@
  * and it draws those. If the editor's current inputs are invalid, it keeps
  * showing the last valid wall and says so.
  */
-import { colorForCategory, formatThickness, gridSpec, layoutWall, MAX_THICKNESS_SCALE, temperatureFraction, thermalCss, thermalGradientCss } from '../geometry';
+import { colorForCategory, describeAxes, formatThickness, gridSpec, layoutWall, MAX_THICKNESS_SCALE, temperatureFraction, thermalCss, thermalGradientCss } from '../geometry';
 import type { ThermalOverlay, WallLayout, WallSpec } from '../geometry';
 import type { LayerView } from '../editor';
 import type { NavigationMode, ViewerFactory, ViewPreset, WallViewer } from '../viewer3d';
@@ -21,6 +21,17 @@ export interface ValidWall {
   thermal: ThermalOverlay | null;
   /** Short statement about the data behind the temperatures (e.g. "uses illustrative material data"). */
   thermalNote: string;
+  /** The whole wall's calculated results (from the engine), shown when the wall is selected; null if not calculated. */
+  results?: WallResultsSummary | null;
+}
+
+/** Headline results of the whole wall, exactly as the calculation engine produced them. */
+export interface WallResultsSummary {
+  uValueWPerM2K: number;
+  totalResistanceM2KPerW: number;
+  heatTransferW: number;
+  direction: 'outward' | 'inward' | 'none';
+  areaM2: number;
 }
 
 export interface ViewerPanelOptions {
@@ -63,6 +74,7 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
   let thicknessScale = DEFAULT_THICKNESS_SCALE;
   let labelsOn = true;
   let gridOn = true;
+  let axesOn = true;
   let overlayOn = true;
   let arrowsOn = true;
   let mode: NavigationMode = 'orbit';
@@ -122,6 +134,11 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
     viewer?.setGridVisible(on);
     renderStatusBar();
   });
+  const axesToggle = toggle('v-axes', 'Axes', true, (on) => {
+    axesOn = on;
+    viewer?.setAxesVisible(on);
+    renderStatusBar();
+  });
   const overlayToggle = toggle('v-thermal', 'Thermal overlay', true, (on) => {
     overlayOn = on;
     options.announce?.(on ? 'Temperature overlay on: colours show calculated temperatures.' : 'Temperature overlay off: colours show material categories.');
@@ -153,8 +170,9 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
       viewButton('Interior', 'Look at the interior face', 'interior'),
       viewButton('Exterior', 'Look at the exterior face', 'exterior'),
       viewButton('Section', 'Look at the cut edge, showing the layers side by side', 'section'),
+      viewButton('Top', 'Plan view from above', 'top'),
     ),
-    h('div', { class: 'tool-group', role: 'group', 'aria-label': 'Display' }, overlayToggle.label, arrowsToggle.label, explodedToggle.label, labelsToggle.label, gridToggle.label, scaleSelect),
+    h('div', { class: 'tool-group', role: 'group', 'aria-label': 'Display' }, overlayToggle.label, arrowsToggle.label, explodedToggle.label, labelsToggle.label, gridToggle.label, axesToggle.label, scaleSelect),
   );
 
   // On small screens the layer list would cover most of the picture, so it starts folded there.
@@ -178,7 +196,7 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
     toolbar,
     stageWrap,
     statusBar,
-    h('p', { class: 'visually-hidden' }, 'Colours identify material categories only; they are not temperatures. This view is geometry, not a thermal result. Drag to rotate, scroll or pinch to zoom. With the 3D view focused: arrow keys rotate, plus and minus zoom, Home resets.'),
+    h('p', { class: 'visually-hidden' }, 'With the thermal overlay on, colours are the calculated steady-state temperatures (see the colour bar); with it off, colours identify material categories only. Arrows show only the direction of heat flow. Drag to rotate, scroll or pinch to zoom. With the 3D view focused: arrow keys rotate, plus and minus zoom, Home resets.'),
   );
 
   // ---- behaviour -----------------------------------------------------------------------------------
@@ -191,7 +209,7 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
     renderInspector();
     options.onSelectionChange?.(selected);
     const name = wall?.spec.layers.find((l) => l.id === selected)?.name;
-    options.announce?.(selected && name ? `Layer selected: ${name}.` : 'Layer selection cleared.');
+    options.announce?.(selected && name ? `Layer selected: ${name}.` : 'Whole wall selected.');
   }
 
   const keyOf = (w: ValidWall | null): string => JSON.stringify([w?.spec ?? null, exploded, thicknessScale]);
@@ -278,10 +296,11 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
       parts.push(`${layout.layers.length} layer${layout.layers.length === 1 ? '' : 's'}`);
       if (gridOn) parts.push(gridSpec(layout).label);
       parts.push(`thickness scale ${layout.thicknessScale}×`);
+      if (axesOn && state === 'ready') parts.push(`Axes x: thickness, int→ext${layout.thicknessScale > 1 ? ` (drawn ${layout.thicknessScale}×)` : ''} · y: height · z: width`);
     }
     parts.push(`Mode: ${mode === 'orbit' ? 'orbit' : 'pan'}`);
     parts.push('Steady state');
-    statusBar.replaceChildren(...parts.map((p) => h('span', {}, p)));
+    statusBar.replaceChildren(...parts.map((p) => h('span', p.startsWith('Axes') ? { title: describeAxes() } : {}, p)));
   }
 
   /** Swatch for a layer: its category colour, or its temperature gradient while the overlay is on. */
@@ -300,6 +319,9 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
     legend.replaceChildren();
     const current = layout;
     if (!current) return;
+    const whole = h('button', { type: 'button', class: 'legend-item legend-wall', 'aria-pressed': String(selected === null), 'data-role': 'select-wall' }, h('span', { class: 'legend-text' }, `Whole wall — ${show(current.widthM, 4)} × ${show(current.heightM, 4)} m, ${formatThickness(current.totalThicknessM)}`));
+    whole.addEventListener('click', () => setSelected(null));
+    legend.append(h('li', {}, whole));
     current.layers.forEach((box, index) => {
       const item = h(
         'button',
@@ -315,10 +337,12 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
   }
 
   function renderInspector(): void {
-    const parts: Child[] = [h('h3', {}, 'Layer inspector')];
+    const parts: Child[] = [h('h3', {}, 'Inspector')];
     const index = wall ? wall.spec.layers.findIndex((l) => l.id === selected) : -1;
-    if (!wall || index < 0) {
-      parts.push(h('p', { class: 'note' }, 'Select a layer in the list, in the 3D view, or with an "Inspect" button to see its details here.'));
+    if (!wall) {
+      parts.push(h('p', { class: 'note' }, 'No wall yet.'));
+    } else if (index < 0) {
+      parts.push(...wallSummary(wall));
     } else {
       const layer = wall.spec.layers[index] as WallSpec['layers'][number];
       const view = wall.views[index];
@@ -350,6 +374,31 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
     inspector.replaceChildren(...(parts.filter(Boolean) as Node[]));
   }
 
+  /** The whole wall: geometry from the layout, results exactly as calculated (nothing is shown if not calculated). */
+  function wallSummary(w: ValidWall): Child[] {
+    const r = w.results;
+    const total = w.spec.layers.reduce((sum, l) => sum + l.thicknessM, 0);
+    const direction = r ? { outward: 'outward (heat loss)', inward: 'inward (heat gain)', none: 'none (no temperature difference)' }[r.direction] : '';
+    return [
+      h('p', { class: 'inspector-title' }, 'Whole wall (selected)'),
+      h(
+        'dl',
+        { class: 'facts', 'data-role': 'wall-summary' },
+        h('dt', {}, 'Size'),
+        h('dd', {}, `${show(w.spec.widthM, 6)} × ${show(w.spec.heightM, 6)} m${r ? ` = ${show(r.areaM2, 6)} m²` : ''}`),
+        h('dt', {}, 'Thickness'),
+        h('dd', {}, `${formatThickness(total)} in ${w.spec.layers.length} layer${w.spec.layers.length === 1 ? '' : 's'}`),
+        r ? h('dt', {}, 'U-value') : null,
+        r ? h('dd', {}, `${show(r.uValueWPerM2K, 4)} W/(m²·K)`) : null,
+        r ? h('dt', {}, 'R_total') : null,
+        r ? h('dd', {}, `${show(r.totalResistanceM2KPerW, 4)} m²·K/W`) : null,
+        r ? h('dt', {}, 'Heat flow Q̇') : null,
+        r ? h('dd', {}, `${show(r.heatTransferW, 4)} W, ${direction}`) : null,
+      ),
+      h('p', { class: 'note' }, r ? 'Steady state, constant air temperatures; see the results panel for the basis. Select a layer to inspect it.' : 'No calculated results for this wall. Select a layer to inspect it.'),
+    ];
+  }
+
   // ---- viewer creation ---------------------------------------------------------------------------------
   const ready = (async (): Promise<void> => {
     if (!options.viewerFactory) return;
@@ -366,6 +415,7 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
     state = viewer ? 'ready' : 'unavailable';
     viewer?.setLabelsVisible(labelsOn);
     viewer?.setGridVisible(gridOn);
+    viewer?.setAxesVisible(axesOn);
     viewer?.setNavigationMode(mode);
     if (viewer && selected) viewer.select(selected);
     redraw(true);

@@ -22,9 +22,11 @@ A box for every layer, drawn from the **validated wall** the editor would give t
 | Zoom | wheel | pinch | `+` / `−` |
 | Pan | right-drag | two-finger drag | — |
 | Reset | "Reset" / "3D" buttons | same | `Home` |
+| Plan view | "Top" button | same | — |
 | Inspect | click a layer | tap a layer | Tab to the layer list, Enter |
+| Select the whole wall | click empty space, or "Whole wall" in the list | same | Tab to "Whole wall", Enter |
 
-A click that is really a drag never selects a layer.
+A click that is really a drag never selects a layer. The x/y/z coordinate axes (switch **Axes**) are described in `docs/workspace.md`.
 
 ## When the inputs are invalid
 
