@@ -302,3 +302,31 @@ pre { overflow: auto; background: var(--bg); border: 1px solid var(--border); pa
   .layer-panel { max-height: 45vh; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+/* ---- workspace switch + building envelope workspace ---- */
+.mode-switch { display: inline-flex; gap: 2px; }
+.b-project-name { font-weight: 700; margin: 6px 0 2px; }
+.b-list { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 3px; }
+.b-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 2px 4px; border: 1px solid transparent; border-radius: 5px; }
+.b-row.selected { border-color: var(--focus); background: var(--surface-2); }
+.b-pick { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; text-align: left; padding: 3px 6px; background: transparent; border-color: transparent; }
+.b-pick[aria-pressed="true"] { border-color: var(--focus); }
+.b-name { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.b-type { font-size: 0.72rem; color: var(--muted); }
+.b-add-row { display: flex; gap: 6px; align-items: center; }
+.b-add-row select { flex: 1; min-width: 0; }
+.b-layers { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 4px; }
+.b-layer { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding-top: 4px; border-top: 1px solid var(--border); }
+.b-layer select { flex: 1 1 70%; min-width: 0; }
+.b-layer .field { flex: 1 1 6em; margin: 0; }
+.doc-field { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 6px 0; }
+.doc-field legend { font-weight: 600; font-size: 0.85rem; }
+.link-button { background: none; border: none; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; text-align: left; }
+button.danger { color: var(--error); border-color: var(--error); }
+.status { display: inline-block; white-space: nowrap; font-size: 0.7rem; font-weight: 700; padding: 0 7px; border-radius: 999px; border: 1px solid currentColor; }
+.status-calculated { color: var(--ok); background: var(--ok-bg); }
+.status-excluded { color: var(--muted); }
+.status-unsupported, .status-missing-data { color: var(--warn); background: var(--warn-bg); }
+.status-invalid { color: var(--error); background: var(--error-bg); }
+.viewer-compass { position: absolute; left: 0; top: 0; font: 700 0.85rem/1 system-ui, sans-serif; color: var(--text); background: rgba(11, 15, 20, 0.7); border: 1px solid var(--border); border-radius: 999px; padding: 2px 6px; pointer-events: none; }
+.viewer-compass-N { color: var(--focus); border-color: var(--focus); }

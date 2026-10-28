@@ -15,6 +15,18 @@ How the application is tested, how to repeat every check, what each kind of test
 | Accessibility scan (axe-core 4.10, 18 scans) | no serious or critical findings; no minor ones after the fixes below |
 | Dependency audit (`npm audit`) | 0 known vulnerabilities |
 
+### Building-envelope stage (2026-10-28)
+
+| Check | Result |
+|---|---|
+| Automated tests (`npm test`) | **1093 tests in 33 files, all pass** (83 new: `envelope` 34, `house` 11, `houseScene` 6, `buildingUi` 29, `architecture` +3; the single-wall tests are unchanged and still pass) |
+| Strict type check, production build | no errors; builds |
+| Code coverage | 96.4 % of statements, 89.3 % of branches over all of `src/` (`src/envelope`: 95.2 % / 91.6 %) |
+| Deliberate-bug check of the envelope code (`validation/mutation_check_envelope.py`) | 27 bugs injected one at a time; **all 27 detected** |
+| Real-browser check (`validation/browser-building.cjs`, Chromium) | **18 checks, all pass**: workspace switch, 3D share of the screen, example house drawn, click-to-select in 3D, camera views, heat-flux colours, hide/show, a window U-value typed for real, axe-core scan (0 violations), phone width, no console errors |
+
+Every element type is compared with a hand calculation in `tests/envelope.test.ts` (wall, roof with heat flowing up and down, floor over outdoor air, element next to an unconditioned space, window, layered door, and an envelope total with gains and losses mixed).
+
 These numbers describe this commit on this machine. Run the checks again after any change.
 
 ## How to repeat the checks
@@ -27,6 +39,7 @@ npm run build             # type check + production build into dist/
 npm run test:coverage     # tests plus a coverage table (coverage/index.html)
 python3 validation/reference_cases.py   # regenerate the independent reference values
 python3 validation/mutation_check.py    # deliberate-bug check of the Stage 8 code (a few minutes)
+python3 validation/mutation_check_envelope.py   # deliberate-bug check of the building-envelope code
 ```
 
 The real-browser scripts need Playwright and a Chromium browser, which are not project dependencies (each script's header has the exact commands):
@@ -36,6 +49,7 @@ The real-browser scripts need Playwright and a Chromium browser, which are not p
 | `validation/browser-workspace.cjs` | `npx vite preview --port 4173` | layout share of the workspace, 3D view, overlay colours counted from real pixels, arrows, coordinate axes, five camera views, results numbers against hand calculation, interaction, phone width, dark mode, reduced motion (78 checks) |
 | `validation/browser-reports.cjs` | same | report tab, all downloads, report opened from disk, PDF, print, hostile text, save/open (52 checks) |
 | `validation/browser-e2e.cjs` | the build in a **sub-folder** (as on GitHub Pages) | a whole session with real typing including a custom material; keyboard-only use; axe-core accessibility scans; speed and memory figures; phone layout (28 checks) |
+| `validation/browser-building.cjs` | `npx vite preview --port 4173` | the building-envelope workspace: switch, 3D share, example house, picking, views, heat-flux colours, hide/show, documented window U-value, accessibility scan, phone width (18 checks) |
 
 ## What each kind of test shows
 
@@ -51,6 +65,7 @@ The real-browser scripts need Playwright and a Chromium browser, which are not p
 | Reports and files | `report`, `persist` | report numbers equal the engine's and an independent hand calculation; text is escaped; wall files survive corruption and cannot inject data |
 | Whole application | `application` | a complete session from an empty wall, checked against hand calculations; 14 extreme walls and 50 random walls drawn on every tab without "NaN", "Infinity" or "undefined" |
 | Architecture | `architecture` | modules only use what they are allowed to (for example, the screen cannot do physics; the report cannot calculate) |
+| Building envelope | `envelope`, `house`, `houseScene`, `buildingUi` | each element type against a hand calculation; correct ΔT and surface resistances per element; ground floors unsupported and partitions not counted; missing or source-less data never used; areas and model checks (openings fit, no overlaps); add / duplicate / delete with safeguards; 3D layout (walls cut around openings) and picking; the screen keeps the model, results and 3D view in step |
 | Mutation checks | `validation/mutation_check.py` (the 32 Stage 8 bugs; run `python3 validation/mutation_check.py`). The scripts for Stages 2–7 were run during development but not kept in the project; their results are in the validation log. | the tests notice deliberately injected bugs |
 
 ## Defects found in Stage 8

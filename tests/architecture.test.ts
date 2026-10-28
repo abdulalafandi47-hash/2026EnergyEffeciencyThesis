@@ -61,12 +61,14 @@ const RULES: Record<string, { allowed: string[]; typeOnlyAllowed?: string[]; fil
   // Dependency-free SVG charts: plain data in, SVG out.
   charts: { allowed: ['charts'] },
   editor: { allowed: ['editor', 'engine', 'materials', 'units'] },
+  // Building envelope: model, geometry checks and per-element calculations (reuses the engine). No screen code.
+  envelope: { allowed: ['envelope', 'engine', 'materials'] },
   // Writes reports from results that already exist. It formats numbers; it never calculates, so it may use the
   // engine, editor and analysis modules for TYPES only.
   report: { allowed: ['report'], typeOnlyAllowed: ['analysis', 'editor', 'engine'] },
   // The screen shows what the editor and geometry produce. It may import the engine and the viewer only for TYPES,
   // except the entry file, which loads the viewer on demand.
-  ui: { allowed: ['ui', 'editor', 'materials', 'geometry', 'analysis', 'charts', 'report'], typeOnlyAllowed: ['engine', 'viewer3d'], fileExceptions: { 'ui/main.ts': ['viewer3d'] } },
+  ui: { allowed: ['ui', 'editor', 'materials', 'geometry', 'analysis', 'charts', 'report', 'envelope'], typeOnlyAllowed: ['engine', 'viewer3d'], fileExceptions: { 'ui/main.ts': ['viewer3d'] } },
 };
 
 describe('module boundaries', () => {
@@ -98,12 +100,19 @@ describe('module boundaries', () => {
 });
 
 describe('no screen code outside src/ui', () => {
-  for (const module of ['engine', 'units', 'materials', 'editor', 'geometry', 'analysis', 'report']) {
+  for (const module of ['engine', 'units', 'materials', 'editor', 'geometry', 'analysis', 'report', 'envelope']) {
     it(`${module}/ does not touch the DOM, window or document`, () => {
-      const offenders = sourceFiles(module).filter((file) => /\b(document|window|localStorage|HTMLElement)\b/.test(codeOf(file)));
+      // Browser objects are reached as `window.…` / `document.…`; the bare word "window" is also a building component type.
+      const offenders = sourceFiles(module).filter((file) => /\b(document|window|globalThis)\s*(\.|\[)|\b(localStorage|sessionStorage|HTMLElement|navigator)\b/.test(codeOf(file)));
       expect(offenders).toEqual([]);
     });
   }
+
+  it('the browser-access rule really catches browser code (guards against a too-lenient pattern)', () => {
+    const rule = /\b(document|window|globalThis)\s*(\.|\[)|\b(localStorage|sessionStorage|HTMLElement|navigator)\b/;
+    for (const bad of ['document.createElement("a")', 'window.print()', 'window ["x"]', 'localStorage', 'navigator.language']) expect(rule.test(bad), bad).toBe(true);
+    for (const fine of ["type: 'window'", "c.type === 'window'", 'isWindow(c)']) expect(rule.test(fine), fine).toBe(false);
+  });
 
   it('the UI contains no engineering formulas (no division of thickness by conductivity, no U-value maths)', () => {
     for (const file of sourceFiles('ui')) {
