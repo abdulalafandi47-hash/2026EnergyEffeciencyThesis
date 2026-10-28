@@ -51,6 +51,11 @@ export interface Layer {
   densityKgPerM3?: number;
   /** Specific heat capacity c_p in J/(kg·K). Optional; needed only for heat capacity. */
   specificHeatJPerKgK?: number;
+  /**
+   * How far this layer's properties can be trusted (copied from the material
+   * database). Optional: if absent, the engine makes no claim either way.
+   */
+  propertyStatus?: DataStatus;
 }
 
 /**
@@ -100,7 +105,9 @@ export interface ValidationIssue {
     | 'must-be-non-negative'
     | 'below-absolute-zero'
     | 'no-layers'
-    | 'invalid-option';
+    | 'invalid-option'
+    | 'invalid-format'
+    | 'duplicate-id';
   /** Where the problem is, e.g. `layers[2].lambdaWPerMK`. */
   path: string;
   /** Human-readable explanation. */
@@ -112,6 +119,7 @@ export interface CalculationWarning {
   code:
     | 'surface-resistance-unverified'
     | 'surface-resistance-orientation'
+    | 'layer-properties-not-verified'
     | 'no-temperature-difference'
     | 'heat-capacity-unavailable';
   message: string;
@@ -134,6 +142,8 @@ export interface LayerResult {
   /** R = d / λ, m²·K/W. */
   resistanceM2KPerW: number;
   fractionOfTotal: number;
+  /** Carried over from the input layer, for reports. */
+  propertyStatus?: DataStatus;
 }
 
 /** A point on the steady-state temperature profile. */

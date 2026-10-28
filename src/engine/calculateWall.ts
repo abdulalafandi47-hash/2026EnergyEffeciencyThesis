@@ -100,6 +100,7 @@ export function calculateWall(input: WallInput): WallCalculationResult {
       lambdaWPerMK: layer.lambdaWPerMK,
       resistanceM2KPerW,
       fractionOfTotal: resistanceM2KPerW / rTotal,
+      ...(layer.propertyStatus ? { propertyStatus: layer.propertyStatus } : {}),
     };
   });
 
@@ -151,6 +152,18 @@ export function calculateWall(input: WallInput): WallCalculationResult {
       message:
         `This model treats the element as a vertical wall (horizontal heat flow), but the surface resistances ` +
         `were chosen for "${surfaceResistances.heatFlowOrientation}" heat flow. Check that this is intended.`,
+    });
+  }
+  const weakLayers = layers.filter(
+    (layer) => layer.propertyStatus === 'illustrative' || layer.propertyStatus === 'unverified',
+  );
+  if (weakLayers.length > 0) {
+    warnings.push({
+      code: 'layer-properties-not-verified',
+      message:
+        `Material properties are not verified reference data for: ` +
+        `${weakLayers.map((layer) => `${layer.name} (${layer.propertyStatus})`).join(', ')}. ` +
+        `Results are for demonstration/comparison only, not for design or compliance.`,
     });
   }
   if (direction === 'none') {

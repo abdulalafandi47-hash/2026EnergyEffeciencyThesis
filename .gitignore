@@ -4,3 +4,4 @@ coverage/
 *.log
 .DS_Store
 __pycache__/
+browser-check-output/
