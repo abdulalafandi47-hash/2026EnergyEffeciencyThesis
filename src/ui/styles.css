@@ -23,7 +23,7 @@
   --focus: #ff9f0a;
   --heat: #ffa94d;
   --sidebar-w: 360px;
-  --results-h: clamp(190px, 25vh, 290px);
+  --results-h: clamp(260px, 38vh, 440px);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -176,6 +176,7 @@ button.tool[aria-pressed="true"] { background: var(--accent); color: var(--accen
 button.tab { border: 0; border-bottom: 2px solid transparent; background: none; border-radius: 0; padding: 4px 9px; min-height: 28px; font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
 button.tab[aria-selected="true"] { color: var(--text); font-weight: 700; border-bottom-color: var(--accent); }
 .headline { margin-left: auto; font-size: 0.78rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.status-chip { margin-left: 4px; padding: 1px 10px; min-height: 24px; font-size: 0.78rem; font-weight: 700; color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn); border-radius: 999px; white-space: nowrap; }
 .results-actions { display: flex; gap: 4px; }
 .results-body { flex: 1; min-height: 0; overflow: auto; }
 .tabpanel { padding: 6px 10px 10px; }

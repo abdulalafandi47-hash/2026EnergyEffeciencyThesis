@@ -628,7 +628,13 @@ export function createResultsPanel(options: {
       return;
     }
     const r = a.result;
-    headline.textContent = `U ${show(r.uValueWPerM2K, 4)} W/(m²·K) · R ${show(r.resistance.totalM2KPerW, 4)} m²·K/W · Q̇ ${show(r.heatTransfer.magnitudeW, 4)} W ${r.heatTransfer.direction === 'none' ? '' : r.heatTransfer.direction}${input.stale ? ' · last valid wall' : ''}${a.usesUnverifiedData ? ' · illustrative data' : ''}`;
+    const numbers = `U ${show(r.uValueWPerM2K, 4)} W/(m²·K) · R ${show(r.resistance.totalM2KPerW, 4)} m²·K/W · Q̇ ${show(r.heatTransfer.magnitudeW, 4)} W ${r.heatTransfer.direction === 'none' ? '' : r.heatTransfer.direction}${input.stale ? ' · last valid wall' : ''} `;
+    // The data status sits next to the numbers it qualifies and opens the assumptions that explain it.
+    const status = a.usesUnverifiedData
+      ? h('button', { type: 'button', class: 'status-chip', 'data-role': 'data-status', title: 'Open the assumptions and data status' }, 'Illustrative or unverified data · not for design')
+      : null;
+    status?.addEventListener('click', () => selectTab('assumptions', true));
+    headline.replaceChildren(numbers, ...(status ? [status] : []));
   }
 
   function render(): void {
