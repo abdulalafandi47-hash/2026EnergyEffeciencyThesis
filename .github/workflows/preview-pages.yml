@@ -4,6 +4,7 @@ name: Publish preview
 on:
   push:
     branches: [master]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: write
@@ -23,6 +24,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: Publish dist/ to gh-pages
+        if: github.event_name != 'pull_request'
         run: |
           cd dist
           touch .nojekyll

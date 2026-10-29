@@ -95,7 +95,7 @@ async function axeScan(page, label) {
   const rTotal = 0.13 + 0.015 / lambda('gypsum-plaster') + 0.2 / lambda('clay-brick-solid') + 0.08 / 0.034 + 0.02 / lambda('cement-plaster') + 0.04;
   const uShown = Number(await page.textContent('[data-kpi="u-value"] .kpi-number'));
   check('U-value with the custom material equals the hand calculation (4 significant digits)', Math.abs(uShown - 1 / rTotal) < 5e-4, `${uShown} vs ${(1 / rTotal).toFixed(6)}`);
-  check('the headline still warns about illustrative data in the other layers', (await page.textContent('[data-role="headline"]')).includes('illustrative data'));
+  check('the headline still warns about illustrative data in the other layers', (await page.textContent('[data-role="headline"]')).includes('Illustrative or unverified data'));
 
   const download = async (selector, name) => {
     const [d] = await Promise.all([page.waitForEvent('download'), page.click(selector)]);

@@ -20,6 +20,6 @@ export {
 export { calculateTemperatureProfile } from './temperatureProfile';
 export type { ProfileLayer } from './temperatureProfile';
 export { validateWallInput } from './validateWallInput';
-export { ABSOLUTE_ZERO_C, numberIssue } from './validation';
+export { ABSOLUTE_ZERO_C, DATA_STATUSES, isBlank, isRecord, numberIssue } from './validation';
 export type { NumberRule } from './validation';
 export type * from './types';

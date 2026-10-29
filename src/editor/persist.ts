@@ -19,6 +19,7 @@
  * A file is untrusted input. `parseDraft` checks every field and copies it into
  * a fresh object (nothing from the file is passed on as-is), and never throws.
  */
+import { isRecord } from '../engine';
 import { MAX_NAME_CHARS, MAX_NOTE_CHARS, validateMaterial } from '../materials';
 import type { MaterialRecord } from '../materials';
 import type { LayerDraft, LengthUnit, SurfaceMode, TemperatureUnit, WallDraft } from './types';
@@ -105,8 +106,6 @@ function copyDraft(draft: WallDraft): WallDraft {
     nextLayerNumber: draft.nextLayerNumber,
   };
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /** A copy of a material record holding only the known fields (anything extra is dropped). */
 function copyMaterial(m: MaterialRecord): MaterialRecord {
