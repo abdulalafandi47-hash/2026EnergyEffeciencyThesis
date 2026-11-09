@@ -169,7 +169,7 @@ button.tool[aria-pressed="true"] { background: var(--accent); color: var(--accen
 .statusbar { display: flex; flex-wrap: wrap; gap: 0 12px; padding: 2px 10px; font-size: 0.7rem; color: var(--muted); background: var(--surface); border-top: 1px solid var(--border); }
 
 /* ---- results panel ---- */
-.results-panel { display: flex; flex-direction: column; height: var(--results-h); min-height: 0; min-width: 0; background: var(--bg-2); border-top: 2px solid var(--border); }
+.results-panel { display: flex; flex-direction: column; height: var(--results-user-h, var(--results-h)); min-height: 0; min-width: 0; background: var(--bg-2); border-top: 2px solid var(--border); }
 .results-panel.enlarged { height: 56vh; }
 .results-panel.collapsed { height: auto; }
 .results-head { display: flex; align-items: center; gap: 8px; padding: 0 8px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
@@ -388,3 +388,26 @@ button.danger { color: var(--error); border-color: var(--error); }
 /* In the narrow building sidebar each fact's label sits above its value. */
 .b-results .facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
 .b-results .facts dd { margin: 0 0 6px; overflow-wrap: anywhere; }
+
+/* ---- collapsible sidebar sections ---- */
+.section-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; min-height: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.section-toggle:hover:not(:disabled) { background: none; color: var(--accent); }
+.section-chevron { flex: none; width: 1em; color: var(--muted); }
+.sidebar section.folded h2 { margin-bottom: 0; }
+
+/* ---- the camera View menu ---- */
+.view-menu { position: relative; }
+.view-menu-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 35; display: grid; grid-template-columns: repeat(2, minmax(110px, auto)); gap: 4px; padding: 6px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.view-menu-list[hidden] { display: none; }
+.view-menu-item { text-align: left; white-space: nowrap; }
+
+/* ---- results panel: resize handle ---- */
+.results-resizer { flex: none; height: 7px; margin-top: -2px; cursor: ns-resize; background: transparent; position: relative; touch-action: none; }
+.results-resizer::after { content: ''; position: absolute; left: 50%; top: 2px; width: 42px; height: 3px; margin-left: -21px; border-radius: 2px; background: var(--border); }
+.results-resizer:hover::after, .results-resizer:focus-visible::after { background: var(--accent); }
+
+/* Phones and small tablets: a shorter 3D view so the results start on screen; no resize handle (the page scrolls). */
+@media (max-width: 960px) {
+  .viewport { height: 56vh; min-height: 320px; }
+  .results-resizer { display: none; }
+}

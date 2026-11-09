@@ -8,6 +8,7 @@ import type { HouseLayout, HouseSpec } from '../geometry';
 import type { HouseViewer, HouseViewerFactory, HouseViewPreset, NavigationMode } from '../viewer3d';
 import { h, show } from './dom';
 import type { FluxView } from './houseSpec';
+import { viewMenu } from './layoutControls';
 
 export type ColourMode = 'type' | 'flux';
 
@@ -56,7 +57,7 @@ export function createHouseViewerPanel(options: { viewerFactory?: HouseViewerFac
     viewer?.setNavigationMode(next);
     renderStatus();
   }
-  const view = (text: string, label: string, preset: HouseViewPreset): HTMLButtonElement => tool(text, label, () => viewer?.setView(preset));
+  const view = (text: string, label: string, preset: HouseViewPreset): { text: string; label: string; choose: () => void } => ({ text, label, choose: () => viewer?.setView(preset) });
   const chip = (id: string, text: string, on: boolean, change: (on: boolean) => void): HTMLLabelElement => {
     const box = h('input', { type: 'checkbox', id });
     box.checked = on;
@@ -77,16 +78,18 @@ export function createHouseViewerPanel(options: { viewerFactory?: HouseViewerFac
     h('div', { class: 'tool-group', role: 'group', 'aria-label': 'Navigation' }, orbit, pan, tool('−', 'Zoom out', () => viewer?.zoom(1 / 0.8)), tool('+', 'Zoom in', () => viewer?.zoom(0.8)), tool('Reset', 'Reset to the 3D view from the south-east', () => viewer?.setView('iso-se'))),
     h(
       'div',
-      { class: 'tool-group', role: 'group', 'aria-label': 'Camera views' },
-      view('3D SE', '3D view from the south-east', 'iso-se'),
-      view('3D SW', '3D view from the south-west', 'iso-sw'),
-      view('3D NE', '3D view from the north-east', 'iso-ne'),
-      view('3D NW', '3D view from the north-west', 'iso-nw'),
-      view('Plan', 'Plan view from above (north at the top)', 'top'),
-      view('N', 'North elevation', 'north'),
-      view('E', 'East elevation', 'east'),
-      view('S', 'South elevation', 'south'),
-      view('W', 'West elevation', 'west'),
+      { class: 'tool-group' },
+      viewMenu([
+        view('3D SE', '3D view from the south-east', 'iso-se'),
+        view('3D SW', '3D view from the south-west', 'iso-sw'),
+        view('3D NE', '3D view from the north-east', 'iso-ne'),
+        view('3D NW', '3D view from the north-west', 'iso-nw'),
+        view('Plan', 'Plan view from above (north at the top)', 'top'),
+        view('North', 'North elevation', 'north'),
+        view('East', 'East elevation', 'east'),
+        view('South', 'South elevation', 'south'),
+        view('West', 'West elevation', 'west'),
+      ], '3D SE'),
     ),
     h('div', { class: 'tool-group', role: 'group', 'aria-label': 'Display' }, colourSelect, chip('h-grid', 'Grid', true, (on) => { gridOn = on; viewer?.setGridVisible(on); renderStatus(); }), chip('h-axes', 'Axes', true, (on) => { axesOn = on; viewer?.setAxesVisible(on); renderStatus(); })),
   );

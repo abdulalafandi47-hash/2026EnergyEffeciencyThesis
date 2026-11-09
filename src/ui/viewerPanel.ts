@@ -12,6 +12,7 @@ import type { ThermalOverlay, WallLayout, WallSpec } from '../geometry';
 import type { LayerView } from '../editor';
 import type { NavigationMode, ViewerFactory, ViewPreset, WallViewer } from '../viewer3d';
 import { h, show } from './dom';
+import { viewMenu } from './layoutControls';
 import type { Child } from './dom';
 
 export interface ValidWall {
@@ -99,7 +100,7 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
     b.addEventListener('click', onClick);
     return b;
   };
-  const viewButton = (text: string, label: string, preset: ViewPreset): HTMLButtonElement => button(text, label, () => viewer?.setView(preset));
+  const viewChoice = (text: string, label: string, preset: ViewPreset): { text: string; label: string; choose: () => void } => ({ text, label, choose: () => viewer?.setView(preset) });
 
   const orbitButton = h('button', { type: 'button', class: 'tool', 'aria-pressed': 'true', 'aria-label': 'Orbit mode: dragging rotates the model' }, 'Orbit');
   const panButton = h('button', { type: 'button', class: 'tool', 'aria-pressed': 'false', 'aria-label': 'Pan mode: dragging moves the view' }, 'Pan');
@@ -165,12 +166,14 @@ export function createViewerPanel(options: ViewerPanelOptions = {}): ViewerPanel
     h('div', { class: 'tool-group', role: 'group', 'aria-label': 'Navigation' }, orbitButton, panButton, button('−', 'Zoom out', () => viewer?.zoom(1 / 0.8)), button('+', 'Zoom in', () => viewer?.zoom(0.8)), button('Reset', 'Reset to the 3D view', () => viewer?.setView('iso'))),
     h(
       'div',
-      { class: 'tool-group', role: 'group', 'aria-label': 'Camera views' },
-      viewButton('3D', 'Show the oblique 3D view', 'iso'),
-      viewButton('Interior', 'Look at the interior face', 'interior'),
-      viewButton('Exterior', 'Look at the exterior face', 'exterior'),
-      viewButton('Section', 'Look at the cut edge, showing the layers side by side', 'section'),
-      viewButton('Top', 'Plan view from above', 'top'),
+      { class: 'tool-group' },
+      viewMenu([
+        viewChoice('3D', 'Show the oblique 3D view', 'iso'),
+        viewChoice('Interior', 'Look at the interior face', 'interior'),
+        viewChoice('Exterior', 'Look at the exterior face', 'exterior'),
+        viewChoice('Section', 'Look at the cut edge, showing the layers side by side', 'section'),
+        viewChoice('Top', 'Plan view from above', 'top'),
+      ], '3D'),
     ),
     h('div', { class: 'tool-group', role: 'group', 'aria-label': 'Display' }, overlayToggle.label, arrowsToggle.label, explodedToggle.label, labelsToggle.label, gridToggle.label, axesToggle.label, scaleSelect),
   );

@@ -42,6 +42,8 @@ import type { Child } from './dom';
 import { helpTip } from './glossary';
 import type { GlossaryTerm } from './glossary';
 import { houseSpecFromProject, fluxView } from './houseSpec';
+import { addResultsResizer, makeCollapsible } from './layoutControls';
+import type { Collapsible } from './layoutControls';
 import { createHouseViewerPanel } from './houseViewerPanel';
 import type { HouseViewerPanel } from './houseViewerPanel';
 import { browserIo } from './io';
@@ -187,6 +189,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
 
   function select(id: string | null): void {
     selected = id !== null && project.components.some((c) => c.id === id) ? id : null;
+    if (selected) folds.editor.setOpen(true);
     viewerPanel.select(selected);
     renderEditor();
     refresh();
@@ -429,6 +432,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
 
   /** Selects the component and puts the cursor in the field that needs data. */
   function goFix(target: { componentId: string; focusId: string }): void {
+    folds.editor.setOpen(true);
     select(target.componentId);
     const field = root.querySelector<HTMLElement>(`[data-focus-id="${CSS.escape(target.focusId)}"]`);
     field?.scrollIntoView({ block: 'center' });
@@ -778,10 +782,24 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     announcer,
   );
   sidebarToggle.addEventListener('click', () => {
+    // On a phone the inputs sit below the 3D view and the results: the button takes you there instead.
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 960px)').matches) {
+      workspace.querySelector('#b-sidebar')?.scrollIntoView({ block: 'start' });
+      return;
+    }
     const collapsed = workspace.classList.toggle('sidebar-collapsed');
     sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
   });
   root.replaceChildren(workspace);
+  // Each sidebar section folds; selecting a component opens the sections that show it.
+  const folds: Record<'project' | 'geometry' | 'conditions' | 'components' | 'editor', Collapsible> = {
+    project: makeCollapsible(projectSection),
+    geometry: makeCollapsible(geometrySection),
+    conditions: makeCollapsible(conditionsSection),
+    components: makeCollapsible(componentsSection),
+    editor: makeCollapsible(editorSection),
+  };
+  addResultsResizer(resultsPanel.element, workspace.querySelector('.stage-column') as HTMLElement, 'building-thermal-simulator.results-height.building', store);
 
   function refresh(): void {
     result = calculateEnvelope(project, materials());

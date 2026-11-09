@@ -84,6 +84,7 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
   const wall: WallEditorHandle = mountWallEditor(wallRoot, BUILT_IN_MATERIALS, {
     ...(options.viewerFactory ? { viewerFactory: options.viewerFactory } : {}),
     topbarExtra: modeSwitch(),
+    store,
     // Keep the last wall in this browser (not while the saved one is being read back).
     onChange: () => {
       if (!restoring) writeKey(store, STORAGE_KEYS.lastWall, wall.serialize());

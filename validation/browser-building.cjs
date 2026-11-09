@@ -106,6 +106,7 @@ async function axeScan(page, label) {
   check('results table lists all 14 elements', rows === 14, `${rows} rows`);
 
   // ---- picking in 3D ---------------------------------------------------------------------------
+  await page.click(B + '[data-role="view-menu-button"]');
   await page.click(B + 'button[aria-label="South elevation"]');
   await page.waitForTimeout(300);
   const box = await page.locator(canvas).boundingBox();
@@ -119,6 +120,7 @@ async function axeScan(page, label) {
   // ---- views -----------------------------------------------------------------------------------
   const pics = {};
   for (const [label, file] of [['Plan view from above (north at the top)', 'plan'], ['North elevation', 'north'], ['3D view from the north-west', 'iso-nw'], ['3D view from the south-east', 'iso-se']]) {
+    await page.click(`${B}[data-role="view-menu-button"]`);
     await page.click(`${B}button[aria-label="${label}"]`);
     await page.waitForTimeout(300);
     pics[file] = await page.locator(canvas).screenshot();
@@ -179,11 +181,29 @@ async function axeScan(page, label) {
   check('missing-data checklist: a click puts the cursor in the U-value field, scrolled into view', fixed.id === 'b-u-value' && fixed.visible, JSON.stringify(fixed));
   await page.screenshot({ path: `${OUT}/building-checklist.png` });
 
+  // ---- results panel: drag the handle; the 3D view gives way; the height is remembered -------------
+  const rh = await page.locator(`${B}[data-role="results-resizer"]`).boundingBox();
+  const resultsBefore = (await page.locator(`${B}#b-results`).boundingBox()).height;
+  const stageBefore = (await page.locator(`${B}.viewer-stage`).boundingBox()).height;
+  await page.mouse.move(rh.x + rh.width / 2, rh.y + 3);
+  await page.mouse.down();
+  await page.mouse.move(rh.x + rh.width / 2, rh.y - 180, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const resultsAfter = (await page.locator(`${B}#b-results`).boundingBox()).height;
+  const stageAfter = (await page.locator(`${B}.viewer-stage`).boundingBox()).height;
+  check('dragging the handle makes the results taller and the 3D view shorter', resultsAfter > resultsBefore + 150 && stageAfter < stageBefore - 150, `${Math.round(resultsBefore)}→${Math.round(resultsAfter)} px`);
+
   // ---- the project survives a reload ------------------------------------------------------------
   const nameBefore = await page.inputValue(`${B}#b-project-name`);
   const countBefore = await page.locator(`${B}[data-role="envelope-table"] tbody tr`).count();
   await page.reload();
   await page.waitForSelector(`${B}.viewer-canvas`);
+  check('the results height is remembered after a reload', Math.abs((await page.locator(`${B}#b-results`).boundingBox()).height - resultsAfter) < 2);
+  await page.focus(`${B}[data-role="results-resizer"]`);
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(200);
+  check('Home on the handle restores the default height', Math.abs((await page.locator(`${B}#b-results`).boundingBox()).height - resultsBefore) < 2);
   check('after a reload the building project is restored', (await page.inputValue(`${B}#b-project-name`)) === nameBefore && (await page.locator(`${B}[data-role="envelope-table"] tbody tr`).count()) === countBefore);
 
   // ---- accessibility ---------------------------------------------------------------------------

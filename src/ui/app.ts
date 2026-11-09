@@ -11,6 +11,9 @@
  *  - structural changes (add/remove/move layer, choose material, change unit)
  *    rebuild the affected part of the page, then restore keyboard focus.
  */
+import { addResultsResizer, makeCollapsible } from './layoutControls';
+import { browserStore } from './storage';
+import type { KeyValueStore } from './storage';
 import { helpTip } from './glossary';
 import {
   addLayer,
@@ -72,6 +75,8 @@ export interface WallEditorOptions {
   topbarExtra?: HTMLElement;
   /** Called after every change of the wall or the custom materials (used to keep the last wall in the browser). */
   onChange?: () => void;
+  /** Browser storage for viewer conveniences (the results panel height); the browser's by default, null for none. */
+  store?: KeyValueStore | null;
 }
 
 /** Result of opening a saved wall. */
@@ -359,11 +364,18 @@ export function mountWallEditor(
     status,
   );
   sidebarToggle.addEventListener('click', () => {
+    // On a phone the inputs sit below the 3D view and the results: the button takes you there instead.
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 960px)').matches) {
+      workspace.querySelector('#sidebar')?.scrollIntoView({ block: 'start' });
+      return;
+    }
     const collapsed = workspace.classList.toggle('sidebar-collapsed');
     sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
     announce(collapsed ? 'Input sidebar hidden.' : 'Input sidebar shown.');
   });
   root.replaceChildren(workspace);
+  for (const section of [dimensionsSection, layersSection, boundarySection]) makeCollapsible(section);
+  addResultsResizer(resultsPanel.element, workspace.querySelector('.stage-column') as HTMLElement, 'building-thermal-simulator.results-height.wall', options.store === undefined ? browserStore() : options.store);
 
   customButton.addEventListener('click', () => {
     resultsPanel.selectTab('materials');

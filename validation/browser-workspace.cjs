@@ -178,12 +178,14 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   await page.uncheck('#v-exploded'); await settle(1200);
   const views = {};
   for (const [name, label] of [['iso', 'Show the oblique 3D view'], ['interior', 'Look at the interior face'], ['exterior', 'Look at the exterior face'], ['section', 'Look at the cut edge, showing the layers side by side'], ['top', 'Plan view from above']]) {
+    await page.click('#viewer [data-role="view-menu-button"]');
     await page.locator(`button[aria-label="${label}"]`).click(); await settle(450); views[name] = await shot();
   }
   const names = Object.keys(views); let allDifferent = true;
   for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) if ((await diff(page, views[names[i]], views[names[j]])) < CHANGED) allDifferent = false;
   check('five camera views give five different pictures', allDifferent);
   // Top (plan) view: interior on the left, exterior on the right, as stated.
+  await page.click('#viewer [data-role="view-menu-button"]');
   await page.locator('button[aria-label="Plan view from above"]').click(); await settle(450);
   const faceX = await page.evaluate(() => { const x = (s) => { const b = document.querySelector(s).getBoundingClientRect(); return b.x + b.width / 2; }; return { i: x('.viewer-face-interior'), e: x('.viewer-face-exterior') }; });
   check('Top view: interior face on the left, exterior on the right', faceX.i < faceX.e, `${Math.round(faceX.i)} < ${Math.round(faceX.e)}`);
