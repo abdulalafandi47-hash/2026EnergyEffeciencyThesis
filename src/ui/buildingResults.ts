@@ -7,11 +7,13 @@ import type { BuildingProject, ComponentStatus, EnvelopeResult } from '../envelo
 import { COMPONENT_TYPE_LABEL } from '../envelope';
 import { h, show, tableRegion } from './dom';
 import { helpTip } from './glossary';
+import { DEFAULT_UNITS, DIFFERENCE_SYMBOL, showDifference, showTemperature, TEMPERATURE_SYMBOL } from './units';
+import type { UnitChoice } from './units';
 import type { GlossaryTerm } from './glossary';
 
 export interface BuildingResultsPanel {
   element: HTMLElement;
-  setResult(project: BuildingProject, result: EnvelopeResult, selectedId: string | null): void;
+  setResult(project: BuildingProject, result: EnvelopeResult, selectedId: string | null, units?: UnitChoice): void;
   selectTab(id: BuildingTab): void;
 }
 
@@ -39,7 +41,7 @@ export function flowWords(w: number): string {
 export function createBuildingResultsPanel(options: { onSelect: (id: string) => void; onFix?: (id: string) => void; onReport?: (format: BuildingReportFormat, title: string, notes: string) => void }): BuildingResultsPanel {
   let active: BuildingTab = 'envelope';
   let collapsed = false;
-  let last: { project: BuildingProject; result: EnvelopeResult; selectedId: string | null } | null = null;
+  let last: { project: BuildingProject; result: EnvelopeResult; selectedId: string | null; units: UnitChoice } | null = null;
 
   const tabs: Array<[BuildingTab, string]> = [['envelope', 'Envelope results'], ['not-included', 'Not included'], ['assumptions', 'Assumptions'], ['report', 'Report']];
   const panels = new Map<BuildingTab, HTMLElement>();
@@ -99,10 +101,12 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
 
   function render(): void {
     if (!last) return;
-    const { project, result, selectedId } = last;
+    const { project, result, selectedId, units } = last;
+    const tSym = TEMPERATURE_SYMBOL[units.temperature];
+    const dSym = DIFFERENCE_SYMBOL[units.temperature];
     const included = result.components.filter((r) => r.status === 'calculated').length;
     const c = project.conditions;
-    headline.textContent = `Steady state · ${c.label}: inside ${show(c.insideC, 4)} °C, outside ${show(c.outsideC, 4)} °C · ${included} of ${result.components.length} elements calculated`;
+    headline.textContent = `Steady state · ${c.label}: inside ${show(showTemperature(c.insideC, units.temperature), 4)} ${tSym}, outside ${show(showTemperature(c.outsideC, units.temperature), 4)} ${tSym} · ${included} of ${result.components.length} elements calculated`;
 
     // ---- envelope tab ----
     const envelope = panels.get('envelope') as HTMLElement;
@@ -120,7 +124,7 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
         h('td', { class: 'num' }, r.dimensions.netAreaM2 > 0 ? show(r.dimensions.netAreaM2, 4) : '—'),
         h('td', { class: 'num' }, r.uValueWPerM2K === null ? '—' : show(r.uValueWPerM2K, 4)),
         h('td', { class: 'num' }, r.surface ? `${show(r.surface.insideM2KPerW, 3)} / ${show(r.surface.outsideM2KPerW, 3)}` : '—'),
-        h('td', { class: 'num' }, r.deltaTK === null ? '—' : show(r.deltaTK, 4)),
+        h('td', { class: 'num' }, r.deltaTK === null ? '—' : show(showDifference(r.deltaTK, units.temperature), 4)),
         h('td', { class: 'num' }, r.heatFlowW === null ? '—' : flowWords(r.heatFlowW)),
         h('td', { class: 'num' }, share === undefined ? '—' : `${show(share * 100, 3)} %`),
         h('td', {}, h('span', { class: `status status-${r.status}` }, STATUS_LABEL[r.status])),
@@ -145,7 +149,7 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
           'table',
           { class: 'data-table', 'data-role': 'envelope-table' },
           h('caption', {}, 'Each element under the stated condition (steady state). Q̇ = U·A·ΔT, ΔT = T_inside − T_other side'),
-          h('thead', {}, h('tr', {}, ...['Element', 'Type', 'Area (m²)', 'U (W/(m²·K))', 'R_si / R_se (m²·K/W)', 'ΔT (K)', 'Q̇', 'Share of Σ|Q̇|', 'Status'].map((t) => h('th', { scope: 'col' }, t, TERM_OF_COLUMN[t] ? helpTip(TERM_OF_COLUMN[t] as GlossaryTerm) : null)))),
+          h('thead', {}, h('tr', {}, ...['Element', 'Type', 'Area (m²)', 'U (W/(m²·K))', 'R_si / R_se (m²·K/W)', `ΔT (${dSym})`, 'Q̇', 'Share of Σ|Q̇|', 'Status'].map((t) => h('th', { scope: 'col' }, t, TERM_OF_COLUMN[t] ? helpTip(TERM_OF_COLUMN[t] as GlossaryTerm) : null)))),
           h('tbody', {}, ...rows),
         ),
       ),
@@ -214,8 +218,8 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
   selectTab('envelope');
   return {
     element,
-    setResult(project, result, selectedId): void {
-      last = { project, result, selectedId };
+    setResult(project, result, selectedId, units = DEFAULT_UNITS): void {
+      last = { project, result, selectedId, units };
       render();
     },
     selectTab,

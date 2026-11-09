@@ -43,6 +43,8 @@ import { helpTip } from './glossary';
 import type { GlossaryTerm } from './glossary';
 import { houseSpecFromProject, fluxView } from './houseSpec';
 import { History, isTextEntry, undoShortcut } from './history';
+import { DEFAULT_UNITS, DIFFERENCE_SYMBOL, readTemperature, readThickness, showDifference, showTemperature, showThickness, TEMPERATURE_SYMBOL } from './units';
+import type { LengthUnit, TemperatureUnit, UnitChoice } from './units';
 import { addResultsResizer, makeCollapsible } from './layoutControls';
 import type { Collapsible } from './layoutControls';
 import { createHouseViewerPanel } from './houseViewerPanel';
@@ -66,6 +68,10 @@ export interface BuildingWorkspaceOptions {
   store?: KeyValueStore | null;
   /** Receives custom materials that arrive with an opened or restored project (they join the session's materials). */
   onImportMaterials?: (records: readonly MaterialRecord[]) => void;
+  /** Units to show and type in (shared with the wall calculator); °C and mm by default. */
+  initialUnits?: UnitChoice;
+  /** Called when the user chooses other units here. */
+  onUnitsChange?: (units: UnitChoice) => void;
 }
 
 /** Result of opening a project file. */
@@ -77,6 +83,9 @@ export interface BuildingWorkspaceHandle {
   getResult(): EnvelopeResult;
   getSelected(): string | null;
   select(id: string | null): void;
+  /** Shows and reads values in these units (the model stays in °C and metres). */
+  setUnits(units: UnitChoice): void;
+  getUnits(): UnitChoice;
   /** Takes back / repeats the last change of the project (false when there is nothing to undo or redo). */
   undo(): boolean;
   redo(): boolean;
@@ -116,6 +125,8 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   const store = options.store === undefined ? browserStore() : options.store;
   const library = new ProjectLibrary(store);
   let project: BuildingProject = createBlankProject();
+  let units: UnitChoice = options.initialUnits ?? DEFAULT_UNITS;
+  const tUnit = (): string => TEMPERATURE_SYMBOL[units.temperature];
   /** The library entry this project was last saved to or opened from (null: not in the library). */
   let libraryId: string | null = null;
   /** The project's file text when it was last saved, opened or loaded; null for a project never saved. */
@@ -168,7 +179,20 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   }
   const positive = (n: number): string | null => (n > 0 ? null : 'It must be greater than zero.');
   const nonNegative = (n: number): string | null => (n >= 0 ? null : 'It cannot be negative.');
-  const temperature = (n: number): string | null => (n >= -273.15 ? null : 'It cannot be below absolute zero (−273.15 °C).');
+  /** Rule for a temperature typed in the current unit. */
+  const temperature = (n: number): string | null => (readTemperature(n, units.temperature) >= -273.15 ? null : `It cannot be below absolute zero (${show(showTemperature(-273.15, units.temperature), 5)} ${tUnit()}).`);
+  /** A temperature field in the chosen unit; the model receives °C. */
+  const temperatureField = (focusId: string, label: string, celsius: number | null, onValid: (c: number | null) => void, allowEmpty = false): HTMLElement =>
+    numberField(focusId, label, tUnit(), celsius === null ? null : showTemperature(celsius, units.temperature), (n) => onValid(n === null ? null : readTemperature(n, units.temperature)), temperature, allowEmpty);
+  const unitSelect = <T extends string>(focusId: string, label: string, choices: Array<[T, string]>, value: T, onChange: (v: T) => void): HTMLElement => selectField(focusId, label, choices, value, onChange);
+  function setUnits(next: UnitChoice, tell = true): void {
+    if (next.temperature === units.temperature && next.thickness === units.thickness) return;
+    units = next;
+    renderProjectInputs();
+    keepingFocus(renderEditor);
+    refresh();
+    if (tell) options.onUnitsChange?.(units);
+  }
 
   function textField(focusId: string, label: string, value: string, onInput: (text: string) => void, max = 200): HTMLElement {
     const id = `b-${focusId}`;
@@ -368,11 +392,16 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     conditionsHost.replaceChildren(
       textField('c-label', 'Name of this condition', c.label, (t) => setC({ label: t })),
       h('div', { class: 'grid' },
-        numberField('c-inside', 'Inside air', '°C', c.insideC, (n) => setC({ insideC: n as number }), temperature),
-        numberField('c-outside', 'Outdoor air', '°C', c.outsideC, (n) => setC({ outsideC: n as number }), temperature),
+        temperatureField('c-inside', 'Inside air', c.insideC, (n) => setC({ insideC: n as number })),
+        temperatureField('c-outside', 'Outdoor air', c.outsideC, (n) => setC({ outsideC: n as number })),
         numberField('c-duration', 'Duration', 'h', c.durationH, (n) => setC({ durationH: n as number }), nonNegative),
       ),
       h('p', { class: 'note' }, 'One constant condition for every element (steady state). These are values you choose, not Cyprus design data; no hourly weather is used in this stage.'),
+      h('div', { class: 'grid b-units' },
+        unitSelect<TemperatureUnit>('unit-temperature', 'Temperature unit', [['C', '°C'], ['K', 'K'], ['F', '°F']], units.temperature, (t) => setUnits({ ...units, temperature: t })),
+        unitSelect<LengthUnit>('unit-thickness', 'Layer thickness unit', [['mm', 'mm'], ['cm', 'cm'], ['m', 'm']], units.thickness, (t) => setUnits({ ...units, thickness: t })),
+      ),
+      h('p', { class: 'note' }, 'Shared with the single-wall calculator. Calculations always use SI units (°C, m); only what you see and type changes. Reports use SI units.'),
     );
   }
 
@@ -513,10 +542,10 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
         if (latest && 'exposure' in latest) commitComponent({ ...latest, exposure } as Component, true);
       }),
       c.exposure.kind === 'unconditioned'
-        ? numberField('exposure-t', 'Temperature of that space', '°C', c.exposure.temperatureC, (n) => {
+        ? temperatureField('exposure-t', 'Temperature of that space', c.exposure.temperatureC, (n) => {
             const latest = current();
             if (latest && 'exposure' in latest) commitComponent({ ...latest, exposure: { kind: 'unconditioned', temperatureC: n } } as Component);
-          }, temperature, true)
+          }, true)
         : null,
     ];
   }
@@ -565,7 +594,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
         ),
         sel,
         h('div', { class: 'b-layer-row' },
-          numberField(`layer-${i}-t`, `Thickness of layer ${i + 1}`, 'mm', layer.thicknessM === null ? null : layer.thicknessM * 1000, (n) => update({ thicknessM: n === null ? null : n / 1000 }), positive, true),
+          numberField(`layer-${i}-t`, `Thickness of layer ${i + 1}`, units.thickness, layer.thicknessM === null ? null : showThickness(layer.thicknessM, units.thickness), (n) => update({ thicknessM: n === null ? null : readThickness(n, units.thickness) }), positive, true),
           h('span', { class: 'layer-buttons' },
           small('↑', `Move layer ${i + 1} towards the inside`, `layer-${i}-up`, i === 0, () => move(i - 1)),
           small('↓', `Move layer ${i + 1} towards the outside`, `layer-${i}-down`, i === construction.layers.length - 1, () => move(i + 1)),
@@ -723,7 +752,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     if (r.totalResistanceM2KPerW !== null) facts.push(...fact('R_total', `${show(r.totalResistanceM2KPerW, 4)} m²·K/W`, 'r-value'));
     if (r.layersResistanceM2KPerW !== null) facts.push(...fact('Σ d/λ (layers only)', `${show(r.layersResistanceM2KPerW, 4)} m²·K/W`));
     if (r.surface) facts.push(...fact('Surface resistances R_si / R_se', `R_si ${show(r.surface.insideM2KPerW, 3)}, R_se ${show(r.surface.outsideM2KPerW, 3)} m²·K/W for ${r.surface.heatFlow} heat flow (${r.surface.status})`));
-    if (r.otherSideC !== null) facts.push(...fact('Other side', `${show(r.otherSideC, 4)} °C; ΔT = ${show(r.deltaTK ?? NaN, 4)} K`));
+    if (r.otherSideC !== null) facts.push(...fact('Other side', `${show(showTemperature(r.otherSideC, units.temperature), 4)} ${tUnit()}; ΔT = ${show(showDifference(r.deltaTK ?? Number.NaN, units.temperature), 4)} ${DIFFERENCE_SYMBOL[units.temperature]}`));
     if (r.heatFlowW !== null) facts.push(...fact('Heat flow Q̇', flowWords(r.heatFlowW), 'heat-flow'));
     if (r.heatCapacity) facts.push(...fact('Heat capacity', `${show(r.heatCapacity.arealJPerM2K / 1000, 4)} kJ/(m²·K); ${show(r.heatCapacity.totalJPerK / 1e6, 4)} MJ/K (simple sum)`));
     const nodes: Node[] = [
@@ -736,8 +765,8 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
       const t = r.engine.temperatureProfile;
       nodes.push(tableRegion('Layers of the selected element', h('table', { class: 'data-table compact', 'data-role': 'b-layer-table' },
         h('caption', {}, 'Layers, inside → outside'),
-        h('thead', {}, h('tr', {}, ...['Layer', 'd (mm)', 'λ', 'R (m²·K/W)', 'T in-side (°C)', 'T out-side (°C)', 'Data'].map((x) => h('th', { scope: 'col' }, x)))),
-        h('tbody', {}, ...r.engine.layers.map((l, i) => h('tr', {}, h('td', {}, l.name), h('td', { class: 'num' }, show(l.thicknessM * 1000, 4)), h('td', { class: 'num' }, show(l.lambdaWPerMK, 3)), h('td', { class: 'num' }, show(l.resistanceM2KPerW, 4)), h('td', { class: 'num' }, show(t[1 + i]?.temperatureC ?? NaN, 4)), h('td', { class: 'num' }, show(t[2 + i]?.temperatureC ?? NaN, 4)), h('td', {}, l.propertyStatus ?? '—')))),
+        h('thead', {}, h('tr', {}, ...['Layer', `d (${units.thickness})`, 'λ', 'R (m²·K/W)', `T in-side (${tUnit()})`, `T out-side (${tUnit()})`, 'Data'].map((x) => h('th', { scope: 'col' }, x)))),
+        h('tbody', {}, ...r.engine.layers.map((l, i) => h('tr', {}, h('td', {}, l.name), h('td', { class: 'num' }, show(showThickness(l.thicknessM, units.thickness), 4)), h('td', { class: 'num' }, show(l.lambdaWPerMK, 3)), h('td', { class: 'num' }, show(l.resistanceM2KPerW, 4)), h('td', { class: 'num' }, show(showTemperature(t[1 + i]?.temperatureC ?? Number.NaN, units.temperature), 4)), h('td', { class: 'num' }, show(showTemperature(t[2 + i]?.temperatureC ?? Number.NaN, units.temperature), 4)), h('td', {}, l.propertyStatus ?? '—')))),
       )));
     }
     if (r.documented.length > 0) {
@@ -862,7 +891,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     renderList();
     viewerPanel.setModel(houseSpecFromProject(project), fluxView(result), project.components.length);
     viewerPanel.select(selected);
-    resultsPanel.setResult(project, result, selected);
+    resultsPanel.setResult(project, result, selected, units);
     if (editorKey !== (selected ?? '')) renderEditor();
     renderSelectedResults();
     renderTodo();
@@ -908,6 +937,8 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     getResult: () => result,
     getSelected: () => selected,
     select,
+    setUnits: (u) => setUnits(u, false),
+    getUnits: () => units,
     undo,
     redo,
     openProjectText: (text, filename) => openProjectText(text, filename),

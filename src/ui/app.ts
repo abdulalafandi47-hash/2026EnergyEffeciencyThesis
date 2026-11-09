@@ -12,6 +12,7 @@
  *    rebuild the affected part of the page, then restore keyboard focus.
  */
 import { History, isTextEntry, undoShortcut } from './history';
+import type { UnitChoice } from './units';
 import { addResultsResizer, makeCollapsible } from './layoutControls';
 import { browserStore } from './storage';
 import type { KeyValueStore } from './storage';
@@ -102,6 +103,13 @@ export interface WallEditorHandle {
   ready: Promise<void>;
   /** The current wall as the text of a wall file (inputs as typed, with the custom materials). */
   serialize(): string;
+  /**
+   * Switches the temperature unit and every layer's thickness unit (typed numbers are converted, so the
+   * wall stays the same). Used to keep the units the same as in the building workspace.
+   */
+  setUnits(units: UnitChoice): void;
+  /** The wall's temperature unit, and its layers' thickness unit when all layers share one (else null). */
+  getUnits(): { temperature: TemperatureUnit; thickness: LengthUnit | null };
   /** Takes back / repeats the last change of the wall (false when there is nothing to undo or redo). */
   undo(): boolean;
   redo(): boolean;
@@ -863,6 +871,19 @@ export function mountWallEditor(
     getCustomMaterials: () => customMaterials,
     addCustomMaterial,
     serialize: () => serializeDraft(draft, allMaterials(), customMaterials),
+    setUnits(units: UnitChoice): void {
+      let next = draft.temperatureUnit === units.temperature ? draft : setTemperatureUnit(draft, units.temperature);
+      for (const layer of next.layers) if (layer.thicknessUnit !== units.thickness) next = setLayerThicknessUnit(next, layer.key, units.thickness);
+      if (next === draft) return;
+      draft = next;
+      syncStaticInputs();
+      renderLayers();
+      refresh();
+    },
+    getUnits: () => {
+      const thicknessUnits = new Set(draft.layers.map((l) => l.thicknessUnit));
+      return { temperature: draft.temperatureUnit, thickness: thicknessUnits.size === 1 ? ([...thicknessUnits][0] as LengthUnit) : null };
+    },
     undo,
     redo,
     importCustomMaterials,

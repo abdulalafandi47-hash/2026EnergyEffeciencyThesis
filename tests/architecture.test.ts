@@ -67,8 +67,9 @@ const RULES: Record<string, { allowed: string[]; typeOnlyAllowed?: string[]; fil
   // engine, editor, analysis and envelope modules for TYPES only.
   report: { allowed: ['report'], typeOnlyAllowed: ['analysis', 'editor', 'engine', 'envelope'] },
   // The screen shows what the editor and geometry produce. It may import the engine and the viewer only for TYPES,
-  // except the entry file, which loads the viewer on demand.
-  ui: { allowed: ['ui', 'editor', 'materials', 'geometry', 'analysis', 'charts', 'report', 'envelope'], typeOnlyAllowed: ['engine', 'viewer3d'], fileExceptions: { 'ui/main.ts': ['viewer3d'] } },
+  // except the entry file, which loads the viewer on demand. It may use the unit conversions to show and read
+  // values in the user's units (the model and every calculation stay in SI).
+  ui: { allowed: ['ui', 'editor', 'materials', 'geometry', 'analysis', 'charts', 'report', 'envelope', 'units'], typeOnlyAllowed: ['engine', 'viewer3d'], fileExceptions: { 'ui/main.ts': ['viewer3d'] } },
 };
 
 describe('module boundaries', () => {

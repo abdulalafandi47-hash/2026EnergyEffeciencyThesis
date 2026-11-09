@@ -13,6 +13,8 @@ import type { BuildingWorkspaceHandle } from './buildingWorkspace';
 import { h } from './dom';
 import { browserStore, readKey, STORAGE_KEYS, writeKey } from './storage';
 import type { KeyValueStore } from './storage';
+import { DEFAULT_UNITS, parseUnitChoice } from './units';
+import type { UnitChoice } from './units';
 import { createWelcome } from './welcome';
 
 export type WorkspaceMode = 'wall' | 'building';
@@ -64,6 +66,21 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
   }
 
   const store = options.store === undefined ? browserStore() : options.store;
+  // One unit choice for both workspaces, kept in this browser.
+  const UNITS_KEY = 'building-thermal-simulator.units';
+  let units: UnitChoice = parseUnitChoice(readKey(store, UNITS_KEY)) ?? DEFAULT_UNITS;
+  function shareUnits(next: UnitChoice, from: 'wall' | 'building'): void {
+    if (next.temperature === units.temperature && next.thickness === units.thickness) return;
+    units = next;
+    writeKey(store, UNITS_KEY, JSON.stringify(units));
+    if (from === 'wall') building?.setUnits(units);
+    else wall.setUnits(units);
+  }
+  /** After a change in the wall: if its units now differ from the shared choice, the building follows. */
+  function unitsFromWall(): void {
+    const w = wall.getUnits();
+    shareUnits({ temperature: w.temperature, thickness: w.thickness ?? units.thickness }, 'wall');
+  }
   const welcome = createWelcome({
     onExample: () => {
       setMode('building');
@@ -87,12 +104,16 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
     store,
     // Keep the last wall in this browser (not while the saved one is being read back).
     onChange: () => {
-      if (!restoring) writeKey(store, STORAGE_KEYS.lastWall, wall.serialize());
+      if (restoring) return;
+      writeKey(store, STORAGE_KEYS.lastWall, wall.serialize());
+      unitsFromWall();
     },
   });
   const lastWall = readKey(store, STORAGE_KEYS.lastWall);
   if (lastWall) wall.openWallText(lastWall, 'your last wall (restored from this browser)');
   restoring = false;
+  // The wall shows the shared units (a restored wall keeps its own until now).
+  wall.setUnits(units);
   let building: BuildingWorkspaceHandle | null = null;
 
   function setMode(next: WorkspaceMode): void {
@@ -103,6 +124,8 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
         ...(options.confirm ? { confirm: options.confirm } : {}),
         getMaterials: () => [...BUILT_IN_MATERIALS, ...wall.getCustomMaterials()],
         onImportMaterials: (records) => wall.importCustomMaterials(records),
+        initialUnits: units,
+        onUnitsChange: (next) => shareUnits(next, 'building'),
         store,
         topbarExtra: modeSwitch(),
       });
