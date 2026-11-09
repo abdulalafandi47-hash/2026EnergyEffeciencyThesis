@@ -805,8 +805,8 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     onReport: makeReport,
   });
   const sidebarToggle = h('button', { type: 'button', class: 'tool', 'aria-expanded': 'true', 'aria-controls': 'b-sidebar', 'data-role': 'b-sidebar-toggle' }, '☰ Inputs');
-  const undoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'b-undo', 'aria-label': 'Undo the last change (Ctrl+Z)', title: 'Undo (Ctrl+Z)', disabled: true }, '↶ Undo');
-  const redoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'b-redo', 'aria-label': 'Redo (Ctrl+Shift+Z)', title: 'Redo (Ctrl+Shift+Z)', disabled: true }, '↷ Redo');
+  const undoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'b-undo', 'aria-label': 'Undo the last change (Ctrl+Z)', title: 'Undo (Ctrl+Z)', disabled: true }, '↶');
+  const redoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'b-redo', 'aria-label': 'Redo (Ctrl+Shift+Z)', title: 'Redo (Ctrl+Shift+Z)', disabled: true }, '↷');
   undoButton.addEventListener('click', () => void undo());
   redoButton.addEventListener('click', () => void redo());
   const workspace = h(

@@ -360,8 +360,8 @@ export function mountWallEditor(
   const openButton = h('button', { type: 'button', class: 'tool', 'data-role': 'open-wall', title: 'Open a wall file saved by this program' }, 'Open wall…');
   const openInput = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'data-role': 'open-wall-input', 'aria-label': 'Wall file to open' });
   const sidebarToggle = h('button', { type: 'button', class: 'tool', 'aria-expanded': 'true', 'aria-controls': 'sidebar', 'data-role': 'sidebar-toggle' }, '☰ Inputs');
-  const undoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'undo', 'aria-label': 'Undo the last change (Ctrl+Z)', title: 'Undo (Ctrl+Z)', disabled: true }, '↶ Undo');
-  const redoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'redo', 'aria-label': 'Redo (Ctrl+Shift+Z)', title: 'Redo (Ctrl+Shift+Z)', disabled: true }, '↷ Redo');
+  const undoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'undo', 'aria-label': 'Undo the last change (Ctrl+Z)', title: 'Undo (Ctrl+Z)', disabled: true }, '↶');
+  const redoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'redo', 'aria-label': 'Redo (Ctrl+Shift+Z)', title: 'Redo (Ctrl+Shift+Z)', disabled: true }, '↷');
   undoButton.addEventListener('click', () => void undo());
   redoButton.addEventListener('click', () => void redo());
   const workspace = h(
@@ -376,7 +376,7 @@ export function mountWallEditor(
       h('span', { class: 'mode-chip' }, 'Steady-state wall analysis'),
       h('span', { class: 'history-tools' }, undoButton, redoButton),
       h('span', { class: 'file-tools' }, saveButton, openButton, openInput),
-      h('details', { class: 'policy' }, h('summary', {}, 'Data policy: illustrative values, not approved Cypriot design values'), h('p', {}, DATA_POLICY)),
+      h('details', { class: 'policy' }, h('summary', { title: 'Data policy: illustrative values, not approved Cypriot design values' }, 'Data: illustrative values, not approved Cypriot design values'), h('p', {}, DATA_POLICY)),
     ),
     h(
       'div',

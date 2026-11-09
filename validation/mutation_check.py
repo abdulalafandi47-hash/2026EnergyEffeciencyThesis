@@ -20,9 +20,9 @@ FILES = ["tests/materialsUi.test.ts", "tests/application.test.ts", "tests/persis
 M = [
  ('remove allowed while used', 'src/ui/app.ts', "    if (used.length > 0) {\n      return { ok: false, message:", "    if (false) {\n      return { ok: false, message:"),
  ('custom materials not used by the calculation', 'src/ui/app.ts', 'result = buildWall(draft, allMaterials());', 'result = buildWall(draft, materials);'),
- ('save omits custom materials', 'src/ui/app.ts', 'serializeDraft(draft, allMaterials(), customMaterials)', 'serializeDraft(draft, allMaterials())'),
- ('open replaces session customs instead of merging', 'src/ui/app.ts', 'customMaterials = [...customMaterials.filter((m) => !fromFile.has(m.id)), ...parsed.customMaterials];', 'customMaterials = parsed.customMaterials;'),
- ("open keeps the session's version over the file's", 'src/ui/app.ts', 'customMaterials = [...customMaterials.filter((m) => !fromFile.has(m.id)), ...parsed.customMaterials];', 'customMaterials = [...customMaterials, ...parsed.customMaterials.filter((m) => !customMaterials.some((c) => c.id === m.id))];'),
+ ('save omits custom materials', 'src/ui/app.ts', "io.download(filename, 'application/json', serializeDraft(draft, allMaterials(), customMaterials) + '\\n');", "io.download(filename, 'application/json', serializeDraft(draft, allMaterials()) + '\\n');"),
+ ('open replaces session customs instead of merging', 'src/ui/app.ts', 'customMaterials = mergeCustom(customMaterials, parsed.customMaterials);', 'customMaterials = parsed.customMaterials;'),
+ ("open keeps the session's version over the file's", 'src/ui/app.ts', 'return [...current.filter((m) => !ids.has(m.id)), ...incoming];', 'return [...current, ...incoming.filter((m) => !current.some((c) => c.id === m.id))];'),
  ('used-by positions off by one', 'src/ui/app.ts', 'usedBy: (id) => draft.layers.flatMap((layer, i) => (layer.materialId === id ? [i + 1] : [])),', 'usedBy: (id) => draft.layers.flatMap((layer, i) => (layer.materialId === id ? [i] : [])),'),
  ('shortcut does not focus the form', 'src/ui/app.ts', '    materialsPanel.focusForm();\n', ''),
  ('layer lists not refreshed after adding', 'src/ui/app.ts', "    customMaterials = [...customMaterials, created.material];\n    renderLayers();", "    customMaterials = [...customMaterials, created.material];"),

@@ -412,3 +412,8 @@ button.danger { color: var(--error); border-color: var(--error); }
   .results-resizer { display: none; }
 }
 .history-tools { display: inline-flex; gap: 4px; }
+/* One line in the top bar: wrapped labels made it taller and the 3D view smaller. */
+.topbar h1, .topbar button, .topbar .mode-chip { white-space: nowrap; }
+.history-tools button.tool { min-width: 2.2em; font-size: 1rem; line-height: 1; }
+.topbar .policy { min-width: 0; }
+.topbar .policy summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
