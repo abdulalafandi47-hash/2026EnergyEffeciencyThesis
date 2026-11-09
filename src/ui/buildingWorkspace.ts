@@ -42,6 +42,7 @@ import type { Child } from './dom';
 import { helpTip } from './glossary';
 import type { GlossaryTerm } from './glossary';
 import { houseSpecFromProject, fluxView } from './houseSpec';
+import { History, isTextEntry, undoShortcut } from './history';
 import { addResultsResizer, makeCollapsible } from './layoutControls';
 import type { Collapsible } from './layoutControls';
 import { createHouseViewerPanel } from './houseViewerPanel';
@@ -76,6 +77,9 @@ export interface BuildingWorkspaceHandle {
   getResult(): EnvelopeResult;
   getSelected(): string | null;
   select(id: string | null): void;
+  /** Takes back / repeats the last change of the project (false when there is nothing to undo or redo). */
+  undo(): boolean;
+  redo(): boolean;
   /** Replaces the project with the text of a project file (asks first if there are unsaved changes). */
   openProjectText(text: string, filename?: string): OpenProjectOutcome;
   /** Saves the project in this browser's project library; false if the browser refused. */
@@ -118,6 +122,13 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   let savedText: string | null = null;
   /** Where the current project came from, for the status line. */
   let origin = '';
+  // ---- undo / redo ----
+  const history = new History<BuildingProject>();
+  /** The project as last drawn; a different one in refresh() means a change to record. */
+  let lastSeen: BuildingProject | null = null;
+  let applyingHistory = false;
+  /** Time of the last typed character (an 'input' event), to merge typing into one undo step. */
+  let lastTypedAt = Number.NEGATIVE_INFINITY;
   let result: EnvelopeResult = calculateEnvelope(project, materials());
   let selected: string | null = null;
   let editorKey = '';
@@ -765,6 +776,10 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     onReport: makeReport,
   });
   const sidebarToggle = h('button', { type: 'button', class: 'tool', 'aria-expanded': 'true', 'aria-controls': 'b-sidebar', 'data-role': 'b-sidebar-toggle' }, '☰ Inputs');
+  const undoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'b-undo', 'aria-label': 'Undo the last change (Ctrl+Z)', title: 'Undo (Ctrl+Z)', disabled: true }, '↶ Undo');
+  const redoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'b-redo', 'aria-label': 'Redo (Ctrl+Shift+Z)', title: 'Redo (Ctrl+Shift+Z)', disabled: true }, '↷ Redo');
+  undoButton.addEventListener('click', () => void undo());
+  redoButton.addEventListener('click', () => void redo());
   const workspace = h(
     'div',
     { class: 'workspace building-workspace' },
@@ -772,6 +787,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
       sidebarToggle,
       h('h1', {}, 'Building Thermal Simulator'),
       options.topbarExtra ?? null,
+      h('span', { class: 'history-tools' }, undoButton, redoButton),
       h('span', { class: 'mode-chip' }, 'Steady-state element calculations'),
       h('details', { class: 'policy' }, h('summary', {}, 'Scope: steady state, not an energy simulation'), h('p', {}, 'Each element is calculated on its own for one constant condition (Q̇ = U·A·ΔT). This is not an hourly, annual or cooling-demand simulation and not a compliance check. Built-in material values are illustrative; window and door values must come from documented sources.')),
     ),
@@ -791,6 +807,14 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
   });
   root.replaceChildren(workspace);
+  workspace.addEventListener('input', () => void (lastTypedAt = Date.now()), true);
+  workspace.addEventListener('keydown', (e) => {
+    const action = undoShortcut(e);
+    if (!action || isTextEntry(e.target)) return;
+    e.preventDefault();
+    if (action === 'undo') undo();
+    else redo();
+  });
   // Each sidebar section folds; selecting a component opens the sections that show it.
   const folds: Record<'project' | 'geometry' | 'conditions' | 'components' | 'editor', Collapsible> = {
     project: makeCollapsible(projectSection),
@@ -801,7 +825,35 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   };
   addResultsResizer(resultsPanel.element, workspace.querySelector('.stage-column') as HTMLElement, 'building-thermal-simulator.results-height.building', store);
 
+  /** Shows `next` (from the history) everywhere, keeping the selection if the component still exists. */
+  function showFromHistory(next: BuildingProject, what: 'Undone' | 'Redone'): void {
+    applyingHistory = true;
+    project = next;
+    if (selected && !project.components.some((c) => c.id === selected)) selected = null;
+    renderProjectInputs();
+    keepingFocus(renderEditor);
+    refresh();
+    applyingHistory = false;
+    announce(`${what}.`);
+  }
+  function undo(): boolean {
+    const previous = history.undo(project);
+    if (!previous) return false;
+    showFromHistory(previous, 'Undone');
+    return true;
+  }
+  function redo(): boolean {
+    const next = history.redo(project);
+    if (!next) return false;
+    showFromHistory(next, 'Redone');
+    return true;
+  }
+
   function refresh(): void {
+    if (lastSeen && project !== lastSeen && !applyingHistory) history.record(lastSeen, Date.now() - lastTypedAt < 50);
+    lastSeen = project;
+    undoButton.disabled = !history.canUndo;
+    redoButton.disabled = !history.canRedo;
     result = calculateEnvelope(project, materials());
     if (!projectNameHost.contains(document.activeElement)) {
       projectNameHost.replaceChildren(textField('project-name', 'Project name', project.name, (t) => commit({ ...project, name: t }), 120));
@@ -856,6 +908,8 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     getResult: () => result,
     getSelected: () => selected,
     select,
+    undo,
+    redo,
     openProjectText: (text, filename) => openProjectText(text, filename),
     saveToLibrary,
     loadExample: () => replaceProject(createExampleHouse(materials()), 'Loading the example house'),

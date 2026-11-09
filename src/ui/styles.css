@@ -411,3 +411,4 @@ button.danger { color: var(--error); border-color: var(--error); }
   .viewport { height: 56vh; min-height: 320px; }
   .results-resizer { display: none; }
 }
+.history-tools { display: inline-flex; gap: 4px; }

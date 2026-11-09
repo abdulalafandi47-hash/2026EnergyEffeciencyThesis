@@ -11,6 +11,7 @@
  *  - structural changes (add/remove/move layer, choose material, change unit)
  *    rebuild the affected part of the page, then restore keyboard focus.
  */
+import { History, isTextEntry, undoShortcut } from './history';
 import { addResultsResizer, makeCollapsible } from './layoutControls';
 import { browserStore } from './storage';
 import type { KeyValueStore } from './storage';
@@ -101,6 +102,9 @@ export interface WallEditorHandle {
   ready: Promise<void>;
   /** The current wall as the text of a wall file (inputs as typed, with the custom materials). */
   serialize(): string;
+  /** Takes back / repeats the last change of the wall (false when there is nothing to undo or redo). */
+  undo(): boolean;
+  redo(): boolean;
   /**
    * Adds custom materials that arrived in another file (a building project). A record with the same id
    * replaces the session's; only records that passed the file checks may be passed in.
@@ -149,6 +153,12 @@ export function mountWallEditor(
   let draft: WallDraft = createInitialDraft(materials);
   let materialFilter = '';
   let result: BuildResult = buildWall(draft, allMaterials());
+  const history = new History<WallDraft>();
+  /** The draft as last shown; a different one in refresh() means a change to record. */
+  let lastSeenDraft: WallDraft | null = null;
+  let applyingHistory = false;
+  /** Time of the last typed character, to merge typing into one undo step. */
+  let lastTypedAt = Number.NEGATIVE_INFINITY;
 
   /** Inputs and their message areas, by field id, for refreshing validation text. */
   const inputs = new Map<string, HTMLInputElement | HTMLSelectElement>();
@@ -342,6 +352,10 @@ export function mountWallEditor(
   const openButton = h('button', { type: 'button', class: 'tool', 'data-role': 'open-wall', title: 'Open a wall file saved by this program' }, 'Open wall…');
   const openInput = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'data-role': 'open-wall-input', 'aria-label': 'Wall file to open' });
   const sidebarToggle = h('button', { type: 'button', class: 'tool', 'aria-expanded': 'true', 'aria-controls': 'sidebar', 'data-role': 'sidebar-toggle' }, '☰ Inputs');
+  const undoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'undo', 'aria-label': 'Undo the last change (Ctrl+Z)', title: 'Undo (Ctrl+Z)', disabled: true }, '↶ Undo');
+  const redoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'redo', 'aria-label': 'Redo (Ctrl+Shift+Z)', title: 'Redo (Ctrl+Shift+Z)', disabled: true }, '↷ Redo');
+  undoButton.addEventListener('click', () => void undo());
+  redoButton.addEventListener('click', () => void redo());
   const workspace = h(
     'div',
     { class: 'workspace' },
@@ -352,6 +366,7 @@ export function mountWallEditor(
       h('h1', {}, 'Building Thermal Simulator'),
       options.topbarExtra ?? null,
       h('span', { class: 'mode-chip' }, 'Steady-state wall analysis'),
+      h('span', { class: 'history-tools' }, undoButton, redoButton),
       h('span', { class: 'file-tools' }, saveButton, openButton, openInput),
       h('details', { class: 'policy' }, h('summary', {}, 'Data policy: illustrative values, not approved Cypriot design values'), h('p', {}, DATA_POLICY)),
     ),
@@ -374,6 +389,14 @@ export function mountWallEditor(
     announce(collapsed ? 'Input sidebar hidden.' : 'Input sidebar shown.');
   });
   root.replaceChildren(workspace);
+  workspace.addEventListener('input', () => void (lastTypedAt = Date.now()), true);
+  workspace.addEventListener('keydown', (e) => {
+    const action = undoShortcut(e);
+    if (!action || isTextEntry(e.target)) return;
+    e.preventDefault();
+    if (action === 'undo') undo();
+    else redo();
+  });
   for (const section of [dimensionsSection, layersSection, boundarySection]) makeCollapsible(section);
   addResultsResizer(resultsPanel.element, workspace.querySelector('.stage-column') as HTMLElement, 'building-thermal-simulator.results-height.wall', options.store === undefined ? browserStore() : options.store);
 
@@ -660,7 +683,34 @@ export function mountWallEditor(
   }
 
   /** Re-validates the draft and updates every message, readout and the summary. */
+  // ---- undo / redo: the draft is an immutable value, so each change can be taken back ----
+  function showFromHistory(next: WallDraft, what: string): void {
+    applyingHistory = true;
+    draft = next;
+    syncStaticInputs();
+    renderLayers();
+    refresh();
+    applyingHistory = false;
+    announce(`${what}.`);
+  }
+  function undo(): boolean {
+    const previous = history.undo(draft);
+    if (!previous) return false;
+    showFromHistory(previous, 'Undone');
+    return true;
+  }
+  function redo(): boolean {
+    const next = history.redo(draft);
+    if (!next) return false;
+    showFromHistory(next, 'Redone');
+    return true;
+  }
+
   function refresh(): void {
+    if (lastSeenDraft && draft !== lastSeenDraft && !applyingHistory) history.record(lastSeenDraft, Date.now() - lastTypedAt < 50);
+    lastSeenDraft = draft;
+    undoButton.disabled = !history.canUndo;
+    redoButton.disabled = !history.canRedo;
     result = buildWall(draft, allMaterials());
 
     for (const [field, input] of inputs) {
@@ -813,6 +863,8 @@ export function mountWallEditor(
     getCustomMaterials: () => customMaterials,
     addCustomMaterial,
     serialize: () => serializeDraft(draft, allMaterials(), customMaterials),
+    undo,
+    redo,
     importCustomMaterials,
     ready: viewerPanel.ready,
     destroy: () => viewerPanel.destroy(),
