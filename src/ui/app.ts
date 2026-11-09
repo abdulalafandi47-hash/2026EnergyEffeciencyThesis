@@ -670,6 +670,15 @@ export function mountWallEditor(
             views,
             thermal: analysis ? thermalOverlayFromAnalysis(analysis, views) : null,
             thermalNote: analysis?.usesUnverifiedData ? 'Uses illustrative or unverified material data: not a design value.' : '',
+            results: analysis
+              ? {
+                  uValueWPerM2K: analysis.result.uValueWPerM2K,
+                  totalResistanceM2KPerW: analysis.result.resistance.totalM2KPerW,
+                  heatTransferW: analysis.result.heatTransfer.magnitudeW,
+                  direction: analysis.result.heatTransfer.direction,
+                  areaM2: analysis.result.geometry.areaM2,
+                }
+              : null,
           }
         : null,
       !result.ok,

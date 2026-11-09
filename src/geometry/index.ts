@@ -1,4 +1,6 @@
 /** Public API of the wall geometry module (pure arithmetic, no 3D library, no DOM). */
+export { AXES, axesSpec, describeAxes } from './axes';
+export type { AxesSpec, AxisSpec } from './axes';
 export { CATEGORY_COLORS, colorForCategory, FALLBACK_COLOR } from './colors';
 export { temperatureFraction, THERMAL_STOPS, thermalCss, thermalGradientCss, thermalRgb } from './colormap';
 export type { Rgb } from './colormap';

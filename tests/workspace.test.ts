@@ -152,11 +152,19 @@ describe('results panel: tabs', () => {
     expect(editor.results.getActiveTab()).toBe('configuration');
   });
 
-  it('the headline stays visible whichever tab is open', () => {
-    const headline = text('[data-role="headline"]');
-    expect(headline).toContain(`U ${show(analysisOf().result.uValueWPerM2K, 4)} W/(m²·K)`);
+  it('the headline always states the basis, and carries the numbers whenever the result tiles are not on screen', () => {
+    const u = `U ${show(analysisOf().result.uValueWPerM2K, 4)} W/(m²·K)`;
+    // Results tab open: the tiles show the numbers, the headline the basis only.
+    expect(text('[data-role="headline"]')).toBe('Steady state · constant air temperatures · illustrative data');
     tab('compare');
+    const headline = text('[data-role="headline"]');
+    expect(headline).toContain('Steady state · ');
+    expect(headline).toContain(u);
+    tab('layers');
     expect(text('[data-role="headline"]')).toBe(headline);
+    tab('results');
+    click(root.querySelector('[data-role="collapse"]'));
+    expect(text('[data-role="headline"]')).toBe(headline); // collapsed: tiles hidden, numbers back in the headline
   });
 
   it('can be collapsed to just the tab bar and headline, and enlarged', () => {
@@ -505,7 +513,7 @@ describe('viewport: colour bar, legend swatches, status bar, navigation', () => 
   });
 
   it('layer swatches show each layer\'s temperature gradient while the overlay is on, and its category colour when off', () => {
-    const swatch = (i: number) => root.querySelectorAll('.legend-item .swatch')[i]?.getAttribute('style') ?? '';
+    const swatch = (i: number) => root.querySelectorAll('.legend-item[data-layer-id] .swatch')[i]?.getAttribute('style') ?? '';
     const overlay = lastOverlay() as ThermalOverlay;
     const start = thermalCss(temperatureFraction(overlay.layers[2]?.startC ?? 0, overlay.minC, overlay.maxC));
     const end = thermalCss(temperatureFraction(overlay.layers[2]?.endC ?? 0, overlay.minC, overlay.maxC));
@@ -515,7 +523,7 @@ describe('viewport: colour bar, legend swatches, status bar, navigation', () => 
   });
 
   it('the inspector adds the calculated temperatures of the selected layer', () => {
-    click(root.querySelectorAll('.legend-item')[2]);
+    click(root.querySelectorAll('.legend-item[data-layer-id]')[2]);
     const a = analysisOf();
     const t = a.layerTemperatures[2];
     expect(text('.inspector')).toContain(`${show(t?.startC ?? 0, 4)} °C at the interior-side face → ${show(t?.endC ?? 0, 4)} °C at the exterior-side face (calculated, steady state)`);

@@ -6,12 +6,12 @@ How the application is tested, how to repeat every check, what each kind of test
 
 | Check | Result |
 |---|---|
-| Automated tests (`npm test`) | **995 tests in 27 files, all pass** |
+| Automated tests (`npm test`) | **1010 tests in 29 files, all pass** (after the workspace refinement) |
 | Strict type check (`npm run typecheck`) | no errors |
 | Production build (`npm run build`) | builds; main bundle 46 kB, 3D part 142 kB (compressed); the 3D part loads after the page is usable |
 | Code coverage (`npm run test:coverage`) | 97.5 % of statements, 92.1 % of branches, 98.0 % of functions, 97.8 % of lines |
 | Deliberate-bug (mutation) checks, Stages 2–8 | 189 bugs injected one at a time; all detected except 1 equivalent change (Stage 7) |
-| Real-browser checks (Chromium, 3 scripts) | **153 checks, all pass** (73 + 52 + 28) |
+| Real-browser checks (Chromium, 3 scripts) | **158 checks, all pass** (78 + 52 + 28) |
 | Accessibility scan (axe-core 4.10, 18 scans) | no serious or critical findings; no minor ones after the fixes below |
 | Dependency audit (`npm audit`) | 0 known vulnerabilities |
 
@@ -33,7 +33,7 @@ The real-browser scripts need Playwright and a Chromium browser, which are not p
 
 | Script | Serves | Checks |
 |---|---|---|
-| `validation/browser-workspace.cjs` | `npx vite preview --port 4173` | 3D view, overlay colours counted from real pixels, arrows, results numbers against hand calculation, interaction, phone width, dark mode, reduced motion (73 checks) |
+| `validation/browser-workspace.cjs` | `npx vite preview --port 4173` | layout share of the workspace, 3D view, overlay colours counted from real pixels, arrows, coordinate axes, five camera views, results numbers against hand calculation, interaction, phone width, dark mode, reduced motion (78 checks) |
 | `validation/browser-reports.cjs` | same | report tab, all downloads, report opened from disk, PDF, print, hostile text, save/open (52 checks) |
 | `validation/browser-e2e.cjs` | the build in a **sub-folder** (as on GitHub Pages) | a whole session with real typing including a custom material; keyboard-only use; axe-core accessibility scans; speed and memory figures; phone layout (28 checks) |
 

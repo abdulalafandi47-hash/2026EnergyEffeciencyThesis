@@ -11,15 +11,31 @@ The application models **one multilayer wall**: a stack of homogeneous layers wi
 | Area | Contents |
 |---|---|
 | Top bar | sidebar toggle (☰ Inputs), title, "Steady-state wall analysis" chip, **Save wall** / **Open wall…**, data-policy note (click to read) |
-| Sidebar (left, collapsible) | validity badge; 1 Wall dimensions; 2 Layers (material, thickness, reorder, remove, Inspect); 3 Boundary conditions and surface resistances |
-| Viewport (centre, about 74 % of the main column's height; the picture alone about 64 %) | toolbar ribbon, 3D picture with ground grid, layer list and inspector (fold-away overlay), colour bar, status bar |
-| Results panel (bottom, collapsible and enlargeable) | tabs: Results · Layers & temperatures · Temperature profile · Compare · **Materials** (Stage 8) · Assumptions & references · **Report** (Stage 7, see `docs/report-format.md`) · Configuration; headline numbers always visible |
+| Sidebar (left, collapsible, 250–300 px wide) | validity badge; 1 Wall dimensions; 2 Layers (material, thickness, reorder, remove, Inspect); 3 Boundary conditions and surface resistances |
+| Viewport (centre; see the measured shares below) | toolbar ribbon, 3D picture with ground grid and x/y/z axes, layer list with **Whole wall** and inspector (fold-away overlay), colour bar, status bar |
+| Results panel (bottom, compact strip of 120–190 px; collapsible and enlargeable) | tabs: Results · Layers & temperatures · Temperature profile · Compare · **Materials** (Stage 8) · Assumptions & references · **Report** (Stage 7, see `docs/report-format.md`) · Configuration; headline numbers always visible |
 
-Hiding the sidebar gives the picture the full window width; collapsing the results panel gives it about 710 px of height at 900 px window height. On phones the 3D view comes first, then results, then the inputs; the toolbar scrolls sideways in one row and the layer list starts folded.
+Share of the **workspace** (the window below the top bar) taken by the 3D viewport with the sidebar shown, measured in Chromium (`validation/browser-workspace.cjs` checks the 1440 × 900 case):
+
+| Window | 3D viewport | 3D picture alone |
+|---|---|---|
+| 1920 × 1080 | 72 % | 68 % |
+| 1440 × 900 | 70 % | 65 % |
+| 1366 × 768 | 68 % | 59 % |
+| 1280 × 720 | 66 % | 55 % |
+| 1024 × 768 | 63 % | 52 % |
+
+On smaller laptop and tablet screens the share is below 70 % because the sidebar and results strip keep a minimum readable size and the toolbar wraps onto two lines. Hiding the sidebar (☰ Inputs) gives the picture the full window width; collapsing the results panel gives it the panel's height as well.
+
+The compact results strip shows the six result tiles (U, R_total, Q̇ with its direction, flux, energy, heat capacity) and the basis line; each tile's formula is its tooltip and is printed in full when the panel is enlarged. While the Results tab is open, the header line says "Steady state · constant air temperatures"; on any other tab, or when the panel is collapsed, it carries the headline numbers. On phones the 3D view comes first, then results, then the inputs; the toolbar scrolls sideways in one row and the layer list starts folded.
 
 ## 3D controls
 
-Toolbar: **Orbit** / **Pan** (what a left-drag does), **−** / **+** zoom, **Reset**; camera views **3D**, **Interior**, **Exterior**, **Section**; switches **Thermal overlay**, **Heat flow** (arrows), **Exploded**, **Labels**, **Grid**; **Thickness** drawing scale (1×, 2×, 5×, 10×; starts at 5×, always disclosed). Also: wheel/pinch zoom, right-drag pan, arrow keys / `+` / `−` / `Home` with the picture focused. The ground grid uses round metric spacing (shown in the status bar) so sizes can be judged.
+Toolbar: **Orbit** / **Pan** (what a left-drag does), **−** / **+** zoom, **Reset**; camera views **3D**, **Interior**, **Exterior**, **Section**, **Top** (plan from above, interior on the left); switches **Thermal overlay**, **Heat flow** (arrows), **Exploded**, **Labels**, **Grid**, **Axes**; **Thickness** drawing scale (1×, 2×, 5×, 10×; starts at 5×, always disclosed). Also: wheel/pinch zoom, right-drag pan, arrow keys / `+` / `−` / `Home` with the picture focused. The ground grid uses round metric spacing (shown in the status bar) so sizes can be judged.
+
+**Coordinate axes** (on by default) start at the bottom corner of the interior face: **x** (red) runs through the wall from the interior towards the exterior, **y** (green) up, **z** (blue) along the wall. They are a display aid drawn on top of the wall. When the thickness is drawn enlarged, distances along x in the picture are enlarged too; the status bar says so.
+
+**Selecting the wall:** the first entry of the layer list, **Whole wall**, is selected at the start and after a click on empty space in the picture. The inspector then shows the wall's size, total thickness and layer count, and the U-value, R_total and Q̇ (with direction) exactly as calculated; nothing is shown if the wall could not be calculated. Selecting a layer (list, picture or Inspect button) shows that layer instead.
 
 ## Thermal overlay (what the colours are)
 

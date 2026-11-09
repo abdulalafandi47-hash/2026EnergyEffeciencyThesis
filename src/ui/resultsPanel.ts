@@ -156,6 +156,7 @@ export function createResultsPanel(options: {
     collapseButton.textContent = collapsed ? 'Show ▸' : 'Collapse ▾';
     body.hidden = collapsed;
     element.classList.toggle('collapsed', collapsed);
+    renderHeadline(); // collapsed: the headline must carry the numbers again
   });
   sizeButton.addEventListener('click', () => {
     expanded = !expanded;
@@ -167,6 +168,7 @@ export function createResultsPanel(options: {
 
   function selectTab(id: TabId, focus = false): void {
     active = id;
+    element.dataset.tab = id; // lets the stylesheet keep the header on one line while the result tiles are shown
     for (const [tabId, tab] of tabButtons) {
       const on = tabId === id;
       tab.setAttribute('aria-selected', String(on));
@@ -185,7 +187,8 @@ export function createResultsPanel(options: {
   const badge = (status: string): HTMLElement => h('span', { class: `badge badge-${status}` }, { verified: 'Verified', unverified: 'Unverified', illustrative: 'Illustrative', 'user-defined': 'User-defined' }[status] ?? status);
 
   function kpi(key: string, label: string, value: string, unit: string, sub: Child, extra?: Child): HTMLElement {
-    return h('div', { class: 'kpi', 'data-kpi': key }, h('div', { class: 'kpi-label' }, label), h('div', { class: 'kpi-value' }, h('span', { class: 'kpi-number' }, value), ' ', h('span', { class: 'kpi-unit' }, unit)), extra ?? null, h('div', { class: 'kpi-sub' }, sub));
+    // The formula line is also the tile's tooltip, because the compact panel hides it until enlarged.
+    return h('div', { class: 'kpi', 'data-kpi': key, title: typeof sub === 'string' ? sub : undefined }, h('div', { class: 'kpi-label' }, label), h('div', { class: 'kpi-value' }, h('span', { class: 'kpi-number' }, value), ' ', h('span', { class: 'kpi-unit' }, unit)), extra ?? null, h('div', { class: 'kpi-sub' }, sub));
   }
 
   // ---- results tab ------------------------------------------------------------------------------------------------
@@ -208,7 +211,7 @@ export function createResultsPanel(options: {
           { class: 'kpis' },
           kpi('u-value', 'Thermal transmittance U', show(r.uValueWPerM2K, 4), 'W/(m²·K)', 'U = 1 / R_total'),
           kpi('r-total', 'Total thermal resistance R_total', show(r.resistance.totalM2KPerW, 4), 'm²·K/W', `R_si + Σ d/λ + R_se = ${show(r.resistance.insideSurfaceM2KPerW)} + ${show(r.resistance.layersM2KPerW, 4)} + ${show(r.resistance.outsideSurfaceM2KPerW)}`),
-          kpi('heat-transfer', 'Heat-transfer rate Q̇ (magnitude)', show(r.heatTransfer.magnitudeW, 4), 'W', `Q̇ = U · A · |ΔT| = ${show(r.uValueWPerM2K, 3)} × ${show(area, 4)} m² × ${show(Math.abs(r.heatTransfer.temperatureDifferenceK), 4)} K`, h('div', { class: `direction direction-${r.heatTransfer.direction}`, 'data-role': 'direction' }, `Direction: ${DIRECTION_WORD[r.heatTransfer.direction]}`)),
+          kpi('heat-transfer', 'Heat-transfer rate Q̇ (magnitude)', show(r.heatTransfer.magnitudeW, 4), 'W', `Q̇ = U · A · |ΔT| = ${show(r.uValueWPerM2K, 3)} × ${show(area, 4)} m² × ${show(Math.abs(r.heatTransfer.temperatureDifferenceK), 4)} K`, h('div', { class: `direction direction-${r.heatTransfer.direction}`, 'data-role': 'direction' }, h('span', { class: 'visually-hidden' }, 'Direction: '), DIRECTION_WORD[r.heatTransfer.direction])),
           kpi('flux', 'Heat flux q', show(r.heatTransfer.fluxMagnitudeWPerM2, 4), 'W/m²', 'q = Q̇ / A'),
           kpi('energy', `Energy in ${show(r.energy.durationHours, 4)} h`, show(r.energy.magnitudeKWh, 4), 'kWh', 'E = Q̇ · t / 1000, constant conditions. Not an annual energy demand.'),
           hc.available
@@ -628,7 +631,14 @@ export function createResultsPanel(options: {
       return;
     }
     const r = a.result;
-    headline.textContent = `U ${show(r.uValueWPerM2K, 4)} W/(m²·K) · R ${show(r.resistance.totalM2KPerW, 4)} m²·K/W · Q̇ ${show(r.heatTransfer.magnitudeW, 4)} W ${r.heatTransfer.direction === 'none' ? '' : r.heatTransfer.direction}${input.stale ? ' · last valid wall' : ''}${a.usesUnverifiedData ? ' · illustrative data' : ''}`;
+    const notes = `${input.stale ? ' · last valid wall' : ''}${a.usesUnverifiedData ? ' · illustrative data' : ''}`;
+    // While the Results tab's tiles are visible they show the numbers, so the headline keeps only the basis
+    // (and the header fits on one line). Collapsed, or on any other tab, the headline carries the numbers.
+    if (active === 'results' && !collapsed) {
+      headline.textContent = `Steady state · constant air temperatures${notes}`;
+      return;
+    }
+    headline.textContent = `Steady state · U ${show(r.uValueWPerM2K, 4)} W/(m²·K) · R ${show(r.resistance.totalM2KPerW, 4)} m²·K/W · Q̇ ${show(r.heatTransfer.magnitudeW, 4)} W ${r.heatTransfer.direction === 'none' ? '' : r.heatTransfer.direction}${input.stale ? ' · last valid wall' : ''}${a.usesUnverifiedData ? ' · illustrative data' : ''}`;
   }
 
   function render(): void {

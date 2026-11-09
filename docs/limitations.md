@@ -63,6 +63,7 @@ Each limitation has an id (M = model, D = data, S = standards and regulation, V 
 | A8 | **Reports are not signed** and record neither the source-code revision nor the test results. The time comes from the user's computer clock. | A report shows what was calculated, not who made it or when beyond doubt. | Keep the JSON export and the wall file with the thesis data. |
 | A9 | **The GitHub Pages preview is public** while the repository is public: anyone with the link can use it. The app sends no data anywhere. | Fine for a demonstration; the preview is not private. | Make the repository private again (the preview then stops), or use another host. |
 | A10 | **Large walls**: tested up to 60 layers on screen and 200 in wall files. Very thin layers (micrometres) are drawn with an enlarged thickness, which the screen discloses. | None for normal walls. | None needed. |
+| A11 | **On screens smaller than 1440 × 900 the 3D view takes less than 70 % of the workspace** (68 % at 1366 × 768, 66 % at 1280 × 720, 63 % at 1024 × 768), because the sidebar and results strip keep a minimum readable size. | A smaller picture on small laptops and tablets. | Hide the sidebar (☰ Inputs) or collapse the results panel. |
 
 ## 6. What the program can be relied on for
 

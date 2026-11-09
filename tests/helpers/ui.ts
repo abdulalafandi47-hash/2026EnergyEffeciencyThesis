@@ -13,6 +13,7 @@ export interface FakeViewer extends WallViewer {
   overlays: Array<ThermalOverlay | null>;
   flows: Array<FlowDirection | null>;
   grids: boolean[];
+  axes: boolean[];
   modes: NavigationMode[];
   zooms: number[];
   destroyed: number;
@@ -32,6 +33,7 @@ export function makeFake(): { factory: ViewerFactory; viewer: () => FakeViewer; 
       overlays: [],
       flows: [],
       grids: [],
+      axes: [],
       modes: [],
       zooms: [],
       destroyed: 0,
@@ -43,6 +45,7 @@ export function makeFake(): { factory: ViewerFactory; viewer: () => FakeViewer; 
       setThermalOverlay: (o) => void fake.overlays.push(o),
       setHeatFlow: (d) => void fake.flows.push(d),
       setGridVisible: (v) => void fake.grids.push(v),
+      setAxesVisible: (v) => void fake.axes.push(v),
       setNavigationMode: (m) => void fake.modes.push(m),
       zoom: (f) => void fake.zooms.push(f),
       destroy: () => void fake.destroyed++,
