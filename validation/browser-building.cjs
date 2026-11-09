@@ -140,6 +140,20 @@ async function axeScan(page, label) {
   check('window with a documented U-value and source becomes calculated', status === 'Calculated', status);
   check('typing was not interrupted', (await page.inputValue(B + '#b-u-source')) === 'Manufacturer datasheet (browser check)' && (await page.inputValue(B + '#b-u-value')) === '1.8');
 
+  // ---- sidebar fits: nothing sticks out (wide tables scroll inside their own region) --------------
+  const overflowing = [];
+  for (const id of ['c3', 'c5', 'c8', 'c14', 'c7']) {
+    await page.click(`${B}[data-role="envelope-table"] tr[data-component="${id}"] button`);
+    await page.waitForTimeout(100);
+    overflowing.push(...(await page.evaluate(() => {
+      const sb = document.querySelector('#b-sidebar');
+      const right = sb.getBoundingClientRect().right - 8;
+      const inScroller = (e) => e.closest('.table-wrap') !== null && !e.classList.contains('table-wrap');
+      return [...sb.querySelectorAll('*')].filter((e) => { const c = e.getBoundingClientRect(); return c.width > 0 && c.right > right + 1 && !inScroller(e); }).map((e) => `${e.tagName}.${e.className}`);
+    })));
+  }
+  check('sidebar editor fits its column for walls, roof, window, door and partition', overflowing.length === 0, overflowing.slice(0, 3).join(', '));
+
   // ---- accessibility ---------------------------------------------------------------------------
   const v = await axeScan(page, 'building workspace');
   if (v) check('axe: no violations in the building workspace', v.length === 0, `${v.length} rule(s)`);

@@ -306,7 +306,9 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
         const latest = get() ?? { layers: [] };
         set({ layers: latest.layers.map((l, k) => (k === i ? { ...l, ...patch } : l)) }, structural);
       };
-      sel.addEventListener('change', () => update({ materialId: sel.value === '' ? null : sel.value }));
+      // Structural: the layer's name line above the list shows the chosen material.
+      sel.addEventListener('change', () => update({ materialId: sel.value === '' ? null : sel.value }, true));
+      const material = layer.materialId ? mats.find((m) => m.id === layer.materialId) : undefined;
       const move = (to: number): void => {
         const latest = get() ?? { layers: [] };
         const layers = [...latest.layers];
@@ -321,13 +323,20 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
         b.addEventListener('click', onClick);
         return b;
       };
+      // Two lines that fit the narrow sidebar: the full material name (wrapping) with its data status,
+      // then the controls. A long name never pushes the thickness field or buttons out of view.
       return h(
         'li',
         { class: 'b-layer' },
-        h('span', { class: 'pos' }, `${i + 1}`),
+        h('div', { class: 'b-layer-head' },
+          h('span', { class: 'pos' }, `${i + 1}`),
+          h('span', { class: 'b-layer-name' }, material ? material.name : layer.materialId ? `${layer.materialId} (not in the database)` : 'No material chosen'),
+          material ? h('span', { class: `badge badge-${material.status}` }, STATUS_TEXT[material.status] ?? material.status) : null,
+        ),
         sel,
-        numberField(`layer-${i}-t`, `Thickness of layer ${i + 1}`, 'mm', layer.thicknessM === null ? null : layer.thicknessM * 1000, (n) => update({ thicknessM: n === null ? null : n / 1000 }), positive, true),
-        h('span', { class: 'layer-buttons' },
+        h('div', { class: 'b-layer-row' },
+          numberField(`layer-${i}-t`, `Thickness of layer ${i + 1}`, 'mm', layer.thicknessM === null ? null : layer.thicknessM * 1000, (n) => update({ thicknessM: n === null ? null : n / 1000 }), positive, true),
+          h('span', { class: 'layer-buttons' },
           small('↑', `Move layer ${i + 1} towards the inside`, `layer-${i}-up`, i === 0, () => move(i - 1)),
           small('↓', `Move layer ${i + 1} towards the outside`, `layer-${i}-down`, i === construction.layers.length - 1, () => move(i + 1)),
           small('✕', `Remove layer ${i + 1}`, `layer-${i}-remove`, false, () => {
@@ -335,6 +344,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
             set({ layers: latest.layers.filter((_, k) => k !== i) }, true);
             root.querySelector<HTMLElement>('[data-focus-id="layer-add"]')?.focus();
           }),
+          ),
         ),
       );
     });

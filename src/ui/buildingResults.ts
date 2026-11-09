@@ -23,6 +23,7 @@ export const STATUS_LABEL: Record<ComponentStatus, string> = {
   invalid: 'Invalid',
 };
 
+const NOTHING_YET = 'No element is calculated yet: add components and enter their data (see the Not included tab).';
 const kWh = (v: number): string => `${show(Math.abs(v), 4)} kWh`;
 /** A signed heat flow in words: positive = out of the conditioned zone. */
 export function flowWords(w: number): string {
@@ -100,6 +101,9 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
     // ---- envelope tab ----
     const envelope = panels.get('envelope') as HTMLElement;
     const net = result.netHeatFlowW;
+    // "—" means "not calculated"; 0 would claim a calculated zero. Nothing calculated → every total is "—".
+    const none = result.contributions.length === 0;
+    const noCapacity = result.components.every((r) => r.heatCapacity === null);
     const rows = result.components.map((r) => {
       const share = result.contributions.find((x) => x.componentId === r.componentId)?.share;
       const tr = h(
@@ -122,11 +126,11 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
       ...([h(
         'div',
         { class: 'kpis' },
-        tile('net', 'Net conductive heat flow Σ U·A·ΔT', result.contributions.length === 0 ? '—' : flowWords(net), 'Sum over the calculated elements only, each with its own ΔT. Positive = heat leaving the conditioned zone.'),
-        tile('gains', 'Heat gains through elements', `${show(result.inwardW, 4)} W`, 'Sum of the elements where heat flows INTO the zone.'),
-        tile('losses', 'Heat losses through elements', `${show(result.outwardW, 4)} W`, 'Sum of the elements where heat flows OUT of the zone.'),
-        tile('energy', `Energy in ${show(c.durationH, 4)} h`, result.contributions.length === 0 ? '—' : `${kWh(result.netEnergyKWh)} ${result.netEnergyKWh > 0 ? 'out' : result.netEnergyKWh < 0 ? 'in' : ''}`, 'Net heat flow × duration at constant conditions. Not an annual energy use or cooling demand.'),
-        tile('mass', 'Heat capacity of layered elements', `${show(result.heatCapacityJPerK / 1e6, 4)} MJ/K`, `Simple sum Σ ρ·c_p·V (thermal-mass indicator, not a dynamic result)${result.heatCapacityMissingFor.length > 0 ? `; not available for: ${result.heatCapacityMissingFor.join(', ')}` : ''}.`),
+        tile('net', 'Net conductive heat flow Σ U·A·ΔT', none ? '—' : flowWords(net), none ? NOTHING_YET : 'Sum over the calculated elements only, each with its own ΔT. Positive = heat leaving the conditioned zone.'),
+        tile('gains', 'Heat gains through elements', none ? '—' : `${show(result.inwardW, 4)} W`, none ? NOTHING_YET : 'Sum of the elements where heat flows INTO the zone.'),
+        tile('losses', 'Heat losses through elements', none ? '—' : `${show(result.outwardW, 4)} W`, none ? NOTHING_YET : 'Sum of the elements where heat flows OUT of the zone.'),
+        tile('energy', `Energy in ${show(c.durationH, 4)} h`, none ? '—' : `${kWh(result.netEnergyKWh)} ${result.netEnergyKWh > 0 ? 'out' : result.netEnergyKWh < 0 ? 'in' : ''}`, none ? NOTHING_YET : 'Net heat flow × duration at constant conditions. Not an annual energy use or cooling demand.'),
+        tile('mass', 'Heat capacity of layered elements', noCapacity ? '—' : `${show(result.heatCapacityJPerK / 1e6, 4)} MJ/K`, noCapacity ? 'No layered element has complete layer data (thickness, density and specific heat) yet.' : `Simple sum Σ ρ·c_p·V (thermal-mass indicator, not a dynamic result)${result.heatCapacityMissingFor.length > 0 ? `; not available for: ${result.heatCapacityMissingFor.join(', ')}` : ''}.`),
       ),
       result.issues.length > 0 ? h('ul', { class: 'warnings', 'data-role': 'model-issues' }, ...result.issues.map((i) => h('li', {}, i.message))) : null,
       tableRegion(
