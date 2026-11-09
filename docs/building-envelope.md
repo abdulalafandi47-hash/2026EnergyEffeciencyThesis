@@ -59,6 +59,22 @@ For each element:
 
 **Documented values.** A window or door U-value is entered with its value, unit, **source** (required), value type (measured / declared / design / unspecified) and test conditions. It is stored as *user-defined*: the program does not check it. A value without a source is refused (*Invalid*) and not used. No default window or door U-value exists anywhere in the program.
 
+### Equations
+
+These are exactly the equations listed in every building report (`BUILDING_EQUATIONS` in `src/report/content.ts`; `tests/buildingReport.test.ts` checks that both stay the same):
+
+| # | Equation | Meaning |
+|---|---|---|
+| 1 | `R = d / λ` | Resistance of one homogeneous layer of thickness d and conductivity λ. |
+| 2 | `R_total = R_si + Σ(d_i / λ_i) + R_se` | Resistances in series of a layered element, with the surface resistances for its heat-flow direction and exposure. |
+| 3 | `U = 1 / R_total` | Thermal transmittance of a layered element. Windows and documented doors use their documented overall U-value instead. |
+| 4 | `A_wall = L_side × H − Σ A_openings` | Net area of an exterior wall: its whole side minus its windows and doors. Openings: width × height; roof and floor: length × depth. |
+| 5 | `ΔT_i = T_inside − T_other,i` | Temperature difference of each element, with the temperature on ITS other side (outdoor air or an unconditioned space). |
+| 6 | `Q̇_i = U_i · A_i · ΔT_i` | Heat flow through one element; positive = heat leaving the conditioned zone, negative = heat entering it. |
+| 7 | `Q̇_net = Σ Q̇_i (calculated elements only)` | Net conductive heat flow of the envelope. Elements that are not calculated are listed, never estimated. |
+| 8 | `E = Q̇_net · t / 1000` | Energy in t hours at constant conditions, in kWh. Not an annual demand. |
+| 9 | `C = Σ ρ_i · c_p,i · A · d_i` | Heat capacity of the layered elements (thermal-mass indicator, a simple sum). |
+
 ## 4. The envelope total
 
 Results panel, *Envelope results* tab:

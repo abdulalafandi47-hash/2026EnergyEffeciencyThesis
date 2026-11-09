@@ -34,7 +34,9 @@ import { parseNumberInput } from '../editor';
 import { BUILT_IN_MATERIALS, MATERIAL_CATEGORIES, THERMAL_VALUE_TYPES } from '../materials';
 import type { MaterialRecord, ThermalValueType } from '../materials';
 import type { HouseViewerFactory } from '../viewer3d';
+import { buildBuildingReport, buildingReportFileBase, renderBuildingJson, renderElementsCsv, renderHtml, renderMarkdown } from '../report';
 import { createBuildingResultsPanel, flowWords, STATUS_LABEL } from './buildingResults';
+import type { BuildingReportFormat } from './buildingResults';
 import { h, show, tableRegion } from './dom';
 import type { Child } from './dom';
 import { houseSpecFromProject, fluxView } from './houseSpec';
@@ -661,7 +663,19 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
 
   // ---- workspace shell ---------------------------------------------------------------------------------
   const viewerPanel = createHouseViewerPanel({ ...(options.houseViewerFactory ? { viewerFactory: options.houseViewerFactory } : {}), onSelect: (id) => select(id), announce });
-  const resultsPanel = createBuildingResultsPanel({ onSelect: (id) => select(id) });
+  /** Builds the building report from the CURRENT project and its result (nothing is recalculated for it). */
+  function makeReport(format: BuildingReportFormat, title: string, notes: string): void {
+    const input = { title, notes, generatedAt: io.now(), project, result, typeLabels: COMPONENT_TYPE_LABEL };
+    const model = buildBuildingReport(input);
+    const base = buildingReportFileBase(model);
+    if (format === 'html') io.download(`${base}.html`, 'text/html', renderHtml(model));
+    else if (format === 'markdown') io.download(`${base}.md`, 'text/markdown', renderMarkdown(model));
+    else if (format === 'json') io.download(`${base}.json`, 'application/json', renderBuildingJson(model, input));
+    else if (format === 'csv') io.download(`${base}-elements.csv`, 'text/csv', renderElementsCsv(input));
+    else io.print(renderHtml(model));
+    announce(format === 'print' ? 'The print dialog shows the building report; choose "Save as PDF" to keep it as a file.' : 'Building report downloaded.');
+  }
+  const resultsPanel = createBuildingResultsPanel({ onSelect: (id) => select(id), onReport: makeReport });
   const sidebarToggle = h('button', { type: 'button', class: 'tool', 'aria-expanded': 'true', 'aria-controls': 'b-sidebar', 'data-role': 'b-sidebar-toggle' }, '☰ Inputs');
   const workspace = h(
     'div',

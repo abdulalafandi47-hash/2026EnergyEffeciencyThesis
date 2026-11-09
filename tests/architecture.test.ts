@@ -5,7 +5,7 @@
  *   units      ← may use the engine's error type only
  *   materials  ← may use the engine (types, validation helpers) only
  *   editor     ← may use engine, materials, units; never the user interface
- *   report     ← pure text output; may import engine/editor/analysis for TYPES only
+ *   report     ← pure text output; may import engine/editor/analysis/envelope for TYPES only
  *   ui         ← may use editor and materials; may import the engine for TYPES only
  *
  * Keeping the screen code away from the engine means the user interface can
@@ -64,8 +64,8 @@ const RULES: Record<string, { allowed: string[]; typeOnlyAllowed?: string[]; fil
   // Building envelope: model, geometry checks and per-element calculations (reuses the engine). No screen code.
   envelope: { allowed: ['envelope', 'engine', 'materials'] },
   // Writes reports from results that already exist. It formats numbers; it never calculates, so it may use the
-  // engine, editor and analysis modules for TYPES only.
-  report: { allowed: ['report'], typeOnlyAllowed: ['analysis', 'editor', 'engine'] },
+  // engine, editor, analysis and envelope modules for TYPES only.
+  report: { allowed: ['report'], typeOnlyAllowed: ['analysis', 'editor', 'engine', 'envelope'] },
   // The screen shows what the editor and geometry produce. It may import the engine and the viewer only for TYPES,
   // except the entry file, which loads the viewer on demand.
   ui: { allowed: ['ui', 'editor', 'materials', 'geometry', 'analysis', 'charts', 'report', 'envelope'], typeOnlyAllowed: ['engine', 'viewer3d'], fileExceptions: { 'ui/main.ts': ['viewer3d'] } },

@@ -13,7 +13,10 @@ export interface BuildingResultsPanel {
   selectTab(id: BuildingTab): void;
 }
 
-export type BuildingTab = 'envelope' | 'not-included' | 'assumptions';
+export type BuildingTab = 'envelope' | 'not-included' | 'assumptions' | 'report';
+
+/** What the Report tab asks the workspace to produce. */
+export type BuildingReportFormat = 'html' | 'markdown' | 'json' | 'csv' | 'print';
 
 export const STATUS_LABEL: Record<ComponentStatus, string> = {
   calculated: 'Calculated',
@@ -31,12 +34,12 @@ export function flowWords(w: number): string {
   return `${show(Math.abs(w), 4)} W ${w > 0 ? 'out (loss)' : 'in (gain)'}`;
 }
 
-export function createBuildingResultsPanel(options: { onSelect: (id: string) => void }): BuildingResultsPanel {
+export function createBuildingResultsPanel(options: { onSelect: (id: string) => void; onReport?: (format: BuildingReportFormat, title: string, notes: string) => void }): BuildingResultsPanel {
   let active: BuildingTab = 'envelope';
   let collapsed = false;
   let last: { project: BuildingProject; result: EnvelopeResult; selectedId: string | null } | null = null;
 
-  const tabs: Array<[BuildingTab, string]> = [['envelope', 'Envelope results'], ['not-included', 'Not included'], ['assumptions', 'Assumptions']];
+  const tabs: Array<[BuildingTab, string]> = [['envelope', 'Envelope results'], ['not-included', 'Not included'], ['assumptions', 'Assumptions'], ['report', 'Report']];
   const panels = new Map<BuildingTab, HTMLElement>();
   const buttons = new Map<BuildingTab, HTMLButtonElement>();
   const tablist = h('div', { class: 'tablist', role: 'tablist', 'aria-label': 'Building results' });
@@ -163,8 +166,42 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
       h('p', { class: 'caption' }, 'Elements listed here are NOT in the totals. Missing data is never filled in with guessed values.'),
     );
 
+    // ---- report ----
+    const reportPanel = panels.get('report') as HTMLElement;
+    if (!reportPanel.contains(document.activeElement)) reportPanel.replaceChildren(reportForm(result));
+
     // ---- assumptions ----
     panels.get('assumptions')?.replaceChildren(h('ul', { 'data-role': 'envelope-assumptions' }, ...result.assumptions.map((a) => h('li', {}, a))));
+  }
+
+  // The report form keeps what was typed when the results change.
+  const reportTitle = h('input', { type: 'text', id: 'b-report-title', autocomplete: 'off', maxlength: '200', placeholder: 'Building envelope calculation report' });
+  const reportNotes = h('textarea', { id: 'b-report-notes', rows: '3', maxlength: '4000', placeholder: 'Optional: purpose of this calculation, assumptions you made, data sources you checked …' });
+  function reportForm(result: EnvelopeResult): HTMLElement {
+    const fire = (format: BuildingReportFormat): void => options.onReport?.(format, reportTitle.value, reportNotes.value);
+    const button = (text: string, role: string, format: BuildingReportFormat, cls = ''): HTMLButtonElement => {
+      const b = h('button', { type: 'button', 'data-role': role, class: cls }, text);
+      b.addEventListener('click', () => fire(format));
+      return b;
+    };
+    const calculated = result.components.filter((r) => r.status === 'calculated').length;
+    return h('div', { class: 'report-layout b-report' },
+      h('div', { class: 'report-controls' },
+        h('div', { class: 'field' }, h('label', { for: 'b-report-title' }, 'Report title'), reportTitle),
+        h('div', { class: 'field' }, h('label', { for: 'b-report-notes' }, 'Your notes (printed at the top)'), reportNotes),
+        h('div', { class: 'report-buttons' },
+          button('Download HTML report', 'b-report-html', 'html', 'primary'),
+          button('Print / save as PDF', 'b-report-print', 'print'),
+          button('Markdown', 'b-report-md', 'markdown'),
+          button('JSON (all numbers)', 'b-report-json', 'json'),
+          button('CSV (element table)', 'b-report-csv', 'csv'),
+        ),
+      ),
+      h('div', { class: 'note', 'data-role': 'b-report-summary' },
+        h('p', {}, `The report holds the project and condition, every component as entered, the results of each element with its layer table, the documented window and door values with their sources, the totals, what is not included and why, the equations, assumptions and limitations, and the project itself for reproducibility.`),
+        h('p', {}, `${calculated} of ${result.components.length} elements are calculated now${result.notIncluded.length > 0 ? `; the report lists the other ${result.notIncluded.length} and says that the totals are incomplete` : ''}.`),
+      ),
+    );
   }
 
   selectTab('envelope');

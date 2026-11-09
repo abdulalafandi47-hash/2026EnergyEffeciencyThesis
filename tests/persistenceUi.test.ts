@@ -26,7 +26,8 @@ let confirms: string[] = [];
 let answer = true;
 const downloads: Array<{ name: string; text: string }> = [];
 let clock = new Date('2026-11-09T10:00:00Z');
-const io: FileIo = { download: (name, _mime, text) => void downloads.push({ name, text }), print: () => undefined, now: () => clock };
+const printed: string[] = [];
+const io: FileIo = { download: (name, _mime, text) => void downloads.push({ name, text }), print: (html) => void printed.push(html), now: () => clock };
 
 function freshRoot(): void {
   document.body.innerHTML = '';
@@ -140,6 +141,29 @@ describe('project files', () => {
     expect(out.ok).toBe(false);
     expect(role('b-file-message').textContent).toMatch(/Could not open bad.json.*not changed/);
     expect(w.getProject()).toBe(before);
+  });
+});
+
+describe('building report from the Report tab', () => {
+  it('downloads HTML, Markdown, JSON and CSV of the current project, and prints', () => {
+    const w = mountWs(memoryStore());
+    click(role('b-example'));
+    typeIn('project-name', 'Report test house');
+    click(root.querySelector('#btab-report'));
+    (root.querySelector('#b-report-title') as HTMLInputElement).value = 'My envelope report';
+    click(role('b-report-html'));
+    click(role('b-report-md'));
+    click(role('b-report-json'));
+    click(role('b-report-csv'));
+    const names = downloads.map((d) => d.name);
+    expect(names[0]).toMatch(/^building-report-\d{8}-\d{6}-[0-9a-f]{8}\.html$/);
+    expect(names.slice(1).map((n) => n.replace(/^building-report-[^.]*?(-elements)?\./, '$1.'))).toEqual(['.md', '.json', '-elements.csv']);
+    expect(downloads[0]?.text).toContain('<h1>My envelope report</h1>');
+    expect(downloads[0]?.text).toContain('Report test house');
+    expect(downloads[1]?.text).toContain('9 of 14 elements are NOT in the totals');
+    expect(JSON.parse(downloads[2]?.text as string).data.project).toEqual(JSON.parse(JSON.stringify(w.getProject())));
+    click(role('b-report-print'));
+    expect(printed.at(-1)).toContain('My envelope report');
   });
 });
 
