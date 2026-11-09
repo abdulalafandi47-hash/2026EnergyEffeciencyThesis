@@ -11,6 +11,7 @@
  *  - structural changes (add/remove/move layer, choose material, change unit)
  *    rebuild the affected part of the page, then restore keyboard focus.
  */
+import { helpTip } from './glossary';
 import {
   addLayer,
   buildWall,
@@ -236,8 +237,8 @@ export function mountWallEditor(
   const customSurfaceBox = h(
     'div',
     { class: 'grid', 'data-role': 'custom-surface' },
-    fieldRow(FIELD.surfaceInside, 'Internal surface resistance R_si (m²·K/W)', surfaceInsideInput),
-    fieldRow(FIELD.surfaceOutside, 'External surface resistance R_se (m²·K/W)', surfaceOutsideInput),
+    fieldRow(FIELD.surfaceInside, 'Internal surface resistance R_si (m²·K/W)', surfaceInsideInput, [helpTip('r-si')]),
+    fieldRow(FIELD.surfaceOutside, 'External surface resistance R_se (m²·K/W)', surfaceOutsideInput, [helpTip('r-se')]),
   );
 
   const boundarySection = h(
@@ -252,7 +253,7 @@ export function mountWallEditor(
     ),
     h('div', { class: 'field inline' }, h('span', { class: 'label-text' }, 'Temperature unit'), temperatureUnit),
     h('div', { class: 'grid' }, fieldRow(FIELD.duration, 'Duration of the energy estimate (hours)', durationInput)),
-    h('div', { class: 'field' }, h('label', { for: 'f-surface-mode' }, 'Surface (air-film) resistances'), surfaceModeSelect),
+    h('div', { class: 'field' }, h('label', { for: 'f-surface-mode' }, 'Surface (air-film) resistances'), surfaceModeSelect, h('span', { class: 'help-row' }, 'What are R_si and R_se? ', helpTip('r-si'), ' ', helpTip('r-se'))),
     customSurfaceBox,
     h(
       'p',

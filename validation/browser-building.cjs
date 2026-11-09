@@ -63,9 +63,22 @@ async function axeScan(page, label) {
   page.on('console', (m) => ['error', 'warning'].includes(m.type()) && errors.push(m.type() + ': ' + m.text()));
   page.on('pageerror', (e) => errors.push('pageerror: ' + e));
 
-  // ---- switch ----------------------------------------------------------------------------------
+  // ---- first-visit welcome --------------------------------------------------------------------
   await page.goto(URL);
   await page.waitForSelector('[data-workspace="wall"] .viewer-canvas');
+  check('first visit: the welcome dialog is shown', await page.isVisible('[data-role="welcome"] [role="dialog"]'));
+  check('welcome: keyboard focus starts on "Load the example house"', await page.evaluate(() => document.activeElement?.getAttribute('data-role') === 'welcome-example'));
+  await page.click('[data-role="welcome-limits-toggle"]');
+  check('welcome: the limitations can be read', await page.isVisible('#welcome-limits'));
+  const vw = await axeScan(page, 'welcome dialog');
+  if (vw) check('axe: no violations with the welcome dialog open', vw.length === 0, `${vw.length} rule(s)`);
+  await page.click('[data-role="welcome-wall"]');
+  check('welcome closes and opens the single-wall calculator', !(await page.isVisible('[data-role="welcome"] [role="dialog"]')));
+  await page.reload();
+  await page.waitForSelector('[data-workspace="wall"] .viewer-canvas');
+  check('the welcome is not shown again on the next visit', !(await page.isVisible('[data-role="welcome"] [role="dialog"]')));
+
+  // ---- switch ----------------------------------------------------------------------------------
   check('opens on the single-wall calculator', (await page.textContent('[data-workspace="wall"] h1')) === 'Building Thermal Simulator');
   await page.click('[data-workspace="wall"] [data-mode="building"]');
   await page.waitForSelector('[data-workspace="building"] .viewer-canvas');
@@ -153,6 +166,25 @@ async function axeScan(page, label) {
     })));
   }
   check('sidebar editor fits its column for walls, roof, window, door and partition', overflowing.length === 0, overflowing.slice(0, 3).join(', '));
+
+  // ---- "?" explanation and the missing-data checklist ------------------------------------------
+  await page.click(`${B}[data-bkpi="net"] .help-tip`);
+  const pop = await page.evaluate(() => { const p = document.querySelector('[data-role="help-pop"]'); const r = p.getBoundingClientRect(); return { shown: !p.hidden, inside: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, text: p.textContent }; });
+  check('"?" opens an explanation inside the window', pop.shown && pop.inside && /Heat flow Q̇/.test(pop.text), JSON.stringify({ inside: pop.inside }));
+  await page.keyboard.press('Escape');
+  check('Escape closes the explanation', await page.evaluate(() => document.querySelector('[data-role="help-pop"]').hidden));
+  await page.click(`${B}.b-todo-item[data-component="c10"]`);
+  await page.waitForTimeout(150);
+  const fixed = await page.evaluate(() => { const a = document.activeElement; const r = a.getBoundingClientRect(); const sb = document.querySelector('#b-sidebar').getBoundingClientRect(); return { id: a.id, visible: r.top >= sb.top && r.bottom <= sb.bottom }; });
+  check('missing-data checklist: a click puts the cursor in the U-value field, scrolled into view', fixed.id === 'b-u-value' && fixed.visible, JSON.stringify(fixed));
+  await page.screenshot({ path: `${OUT}/building-checklist.png` });
+
+  // ---- the project survives a reload ------------------------------------------------------------
+  const nameBefore = await page.inputValue(`${B}#b-project-name`);
+  const countBefore = await page.locator(`${B}[data-role="envelope-table"] tbody tr`).count();
+  await page.reload();
+  await page.waitForSelector(`${B}.viewer-canvas`);
+  check('after a reload the building project is restored', (await page.inputValue(`${B}#b-project-name`)) === nameBefore && (await page.locator(`${B}[data-role="envelope-table"] tbody tr`).count()) === countBefore);
 
   // ---- accessibility ---------------------------------------------------------------------------
   const v = await axeScan(page, 'building workspace');

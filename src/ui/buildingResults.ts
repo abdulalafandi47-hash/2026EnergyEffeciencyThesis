@@ -6,6 +6,8 @@
 import type { BuildingProject, ComponentStatus, EnvelopeResult } from '../envelope';
 import { COMPONENT_TYPE_LABEL } from '../envelope';
 import { h, show, tableRegion } from './dom';
+import { helpTip } from './glossary';
+import type { GlossaryTerm } from './glossary';
 
 export interface BuildingResultsPanel {
   element: HTMLElement;
@@ -34,7 +36,7 @@ export function flowWords(w: number): string {
   return `${show(Math.abs(w), 4)} W ${w > 0 ? 'out (loss)' : 'in (gain)'}`;
 }
 
-export function createBuildingResultsPanel(options: { onSelect: (id: string) => void; onReport?: (format: BuildingReportFormat, title: string, notes: string) => void }): BuildingResultsPanel {
+export function createBuildingResultsPanel(options: { onSelect: (id: string) => void; onFix?: (id: string) => void; onReport?: (format: BuildingReportFormat, title: string, notes: string) => void }): BuildingResultsPanel {
   let active: BuildingTab = 'envelope';
   let collapsed = false;
   let last: { project: BuildingProject; result: EnvelopeResult; selectedId: string | null } | null = null;
@@ -91,8 +93,9 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
     render();
   }
 
-  const tile = (key: string, label: string, value: string, sub: string): HTMLElement =>
-    h('div', { class: 'kpi', 'data-bkpi': key, title: sub }, h('div', { class: 'kpi-label' }, label), h('div', { class: 'kpi-value' }, h('span', { class: 'kpi-number' }, value)), h('div', { class: 'kpi-sub' }, sub));
+  const tile = (key: string, label: string, value: string, sub: string, term?: GlossaryTerm): HTMLElement =>
+    h('div', { class: 'kpi', 'data-bkpi': key, title: sub }, h('div', { class: 'kpi-label' }, label, term ? helpTip(term) : null), h('div', { class: 'kpi-value' }, h('span', { class: 'kpi-number' }, value)), h('div', { class: 'kpi-sub' }, sub));
+  const TERM_OF_COLUMN: Record<string, GlossaryTerm> = { 'U (W/(m²·K))': 'u-value', 'R_si / R_se (m²·K/W)': 'r-si', 'Q̇': 'heat-flow' };
 
   function render(): void {
     if (!last) return;
@@ -129,7 +132,7 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
       ...([h(
         'div',
         { class: 'kpis' },
-        tile('net', 'Net conductive heat flow Σ U·A·ΔT', none ? '—' : flowWords(net), none ? NOTHING_YET : 'Sum over the calculated elements only, each with its own ΔT. Positive = heat leaving the conditioned zone.'),
+        tile('net', 'Net conductive heat flow Σ U·A·ΔT', none ? '—' : flowWords(net), none ? NOTHING_YET : 'Sum over the calculated elements only, each with its own ΔT. Positive = heat leaving the conditioned zone.', 'heat-flow'),
         tile('gains', 'Heat gains through elements', none ? '—' : `${show(result.inwardW, 4)} W`, none ? NOTHING_YET : 'Sum of the elements where heat flows INTO the zone.'),
         tile('losses', 'Heat losses through elements', none ? '—' : `${show(result.outwardW, 4)} W`, none ? NOTHING_YET : 'Sum of the elements where heat flows OUT of the zone.'),
         tile('energy', `Energy in ${show(c.durationH, 4)} h`, none ? '—' : `${kWh(result.netEnergyKWh)} ${result.netEnergyKWh > 0 ? 'out' : result.netEnergyKWh < 0 ? 'in' : ''}`, none ? NOTHING_YET : 'Net heat flow × duration at constant conditions. Not an annual energy use or cooling demand.'),
@@ -142,7 +145,7 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
           'table',
           { class: 'data-table', 'data-role': 'envelope-table' },
           h('caption', {}, 'Each element under the stated condition (steady state). Q̇ = U·A·ΔT, ΔT = T_inside − T_other side'),
-          h('thead', {}, h('tr', {}, ...['Element', 'Type', 'Area (m²)', 'U (W/(m²·K))', 'R_si / R_se (m²·K/W)', 'ΔT (K)', 'Q̇', 'Share of Σ|Q̇|', 'Status'].map((t) => h('th', { scope: 'col' }, t)))),
+          h('thead', {}, h('tr', {}, ...['Element', 'Type', 'Area (m²)', 'U (W/(m²·K))', 'R_si / R_se (m²·K/W)', 'ΔT (K)', 'Q̇', 'Share of Σ|Q̇|', 'Status'].map((t) => h('th', { scope: 'col' }, t, TERM_OF_COLUMN[t] ? helpTip(TERM_OF_COLUMN[t] as GlossaryTerm) : null)))),
           h('tbody', {}, ...rows),
         ),
       ),
@@ -162,7 +165,11 @@ export function createBuildingResultsPanel(options: { onSelect: (id: string) => 
     panels.get('not-included')?.replaceChildren(
       result.notIncluded.length === 0
         ? h('p', { class: 'note' }, 'Every element is calculated and included.')
-        : h('ul', { class: 'not-included', 'data-role': 'not-included' }, ...result.notIncluded.map((n) => h('li', {}, h('strong', {}, `${n.name} — ${STATUS_LABEL[n.status]}: `), n.reasons.join(' ')))),
+        : h('ul', { class: 'not-included', 'data-role': 'not-included' }, ...result.notIncluded.map((n) => {
+            const go = h('button', { type: 'button', class: 'link-button', 'data-component': n.componentId }, `${n.name} — ${STATUS_LABEL[n.status]}`);
+            go.addEventListener('click', () => (options.onFix ?? options.onSelect)(n.componentId));
+            return h('li', {}, go, ': ', n.reasons.join(' '));
+          })),
       h('p', { class: 'caption' }, 'Elements listed here are NOT in the totals. Missing data is never filled in with guessed values.'),
     );
 

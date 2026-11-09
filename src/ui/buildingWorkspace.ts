@@ -39,6 +39,8 @@ import { createBuildingResultsPanel, flowWords, STATUS_LABEL } from './buildingR
 import type { BuildingReportFormat } from './buildingResults';
 import { h, show, tableRegion } from './dom';
 import type { Child } from './dom';
+import { helpTip } from './glossary';
+import type { GlossaryTerm } from './glossary';
 import { houseSpecFromProject, fluxView } from './houseSpec';
 import { createHouseViewerPanel } from './houseViewerPanel';
 import type { HouseViewerPanel } from './houseViewerPanel';
@@ -76,6 +78,9 @@ export interface BuildingWorkspaceHandle {
   openProjectText(text: string, filename?: string): OpenProjectOutcome;
   /** Saves the project in this browser's project library; false if the browser refused. */
   saveToLibrary(asCopy?: boolean): boolean;
+  /** Loads the example house / starts a blank project (asks first if unsaved work would be lost). */
+  loadExample(): void;
+  newBlank(): void;
   library: ProjectLibrary;
   viewer: HouseViewerPanel;
   ready: Promise<void>;
@@ -378,15 +383,80 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     select(id);
     announce(`${COMPONENT_TYPE_LABEL[type]} added. Enter its properties in the editor.`);
   }, 'primary');
+  const todo = h('div', { class: 'b-todo', 'data-role': 'b-todo' });
   const componentsSection = h(
     'section',
     { 'aria-labelledby': 'b-h-components' },
     h('h2', { id: 'b-h-components' }, '4. Components'),
+    todo,
     list,
     h('div', { class: 'b-add-row' }, addType, addButton),
     addMsg,
     h('p', { class: 'note' }, 'Untick to hide an element in the 3D view; it is still calculated. Windows and doors are added to the selected wall (or the first wall).'),
   );
+
+  /**
+   * Where to type to fix a component that is not calculated: the data-focus-id of the field, or null
+   * when nothing can be entered (unsupported or deliberately not counted).
+   */
+  function fixTarget(c: Component, r: ComponentResult): { componentId: string; focusId: string } | null {
+    if (r.status !== 'missing-data' && r.status !== 'invalid') return null;
+    const here = (focusId: string): { componentId: string; focusId: string } => ({ componentId: c.id, focusId });
+    const layers = (construction: Construction): { componentId: string; focusId: string } => {
+      if (construction.layers.length === 0) return here('layer-add');
+      const i = construction.layers.findIndex((l) => l.materialId === null || !materials().some((m) => m.id === l.materialId));
+      if (i >= 0) return here(`layer-${i}-mat`);
+      const t = construction.layers.findIndex((l) => l.thicknessM === null || !(l.thicknessM > 0));
+      return here(t >= 0 ? `layer-${t}-t` : 'layer-add');
+    };
+    if ('exposure' in c && c.exposure.kind === 'unconditioned' && c.exposure.temperatureC === null) return here('exposure-t');
+    if (isGlazing(c) || (c.type === 'door' && c.spec.kind === 'u-value')) {
+      const u = isGlazing(c) ? c.uValue : c.type === 'door' && c.spec.kind === 'u-value' ? c.spec.uValue : null;
+      if (u === null) return here('u-value');
+      if (u.source.trim() === '') return here('u-source');
+      // With a valid U-value, a missing temperature of the host wall's space is fixed on the host wall.
+      const host = project.components.find((w) => w.id === c.hostId);
+      if (r.status === 'missing-data' && host && 'exposure' in host && host.exposure.kind === 'unconditioned' && host.exposure.temperatureC === null) return { componentId: host.id, focusId: 'exposure-t' };
+      if (r.status === 'invalid' && r.reasons.some((x) => /U-value/.test(x))) return here('u-value');
+      if (r.status === 'invalid' && r.reasons.some((x) => /g-value/.test(x))) return here('g-value');
+      if (r.status === 'invalid' && r.reasons.some((x) => /Shading/.test(x))) return here('fc-value');
+      return here('width');
+    }
+    if ('construction' in c) return layers(c.construction);
+    if (c.type === 'door' && c.spec.kind === 'layers') return layers(c.spec.construction);
+    return here('name');
+  }
+
+  /** Selects the component and puts the cursor in the field that needs data. */
+  function goFix(target: { componentId: string; focusId: string }): void {
+    select(target.componentId);
+    const field = root.querySelector<HTMLElement>(`[data-focus-id="${CSS.escape(target.focusId)}"]`);
+    field?.scrollIntoView({ block: 'center' });
+    field?.focus();
+  }
+
+  function renderTodo(): void {
+    const items = result.components.flatMap((r) => {
+      const c = project.components.find((x) => x.id === r.componentId);
+      const target = c ? fixTarget(c, r) : null;
+      return c && target ? [{ c, r, target }] : [];
+    });
+    const cannot = result.components.filter((r) => r.status === 'unsupported');
+    todo.hidden = project.components.length === 0;
+    keepingFocus(() => todo.replaceChildren(...([
+      items.length === 0
+        ? h('p', { class: 'b-todo-done' }, '✓ No data missing.')
+        : h('details', { class: 'b-todo-box', open: true },
+            h('summary', {}, `Missing data: ${items.length} element${items.length === 1 ? '' : 's'} not calculated`),
+            h('ul', { 'data-role': 'b-todo-list' }, ...items.map(({ c, r, target }) => {
+              const b = h('button', { type: 'button', class: 'b-todo-item', 'data-focus-id': `todo-${c.id}`, 'data-component': c.id }, h('strong', {}, c.name), h('span', {}, r.reasons[0] ?? 'Enter the missing data.'));
+              b.addEventListener('click', () => goFix(target));
+              return h('li', {}, b);
+            })),
+          ),
+      cannot.length > 0 ? h('p', { class: 'note' }, `Cannot be calculated in this stage: ${cannot.map((r) => r.name).join(', ')} (see Not included).`) : null,
+    ].filter(Boolean) as Node[])));
+  }
 
   function renderList(): void {
     keepingFocus(() => {
@@ -509,7 +579,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   }
 
   /** Editor for a traceable value: number, source, value type, conditions. */
-  function documentedEditor(prefix: string, label: string, unit: string, get: () => DocumentedValue | null, set: (v: DocumentedValue | null) => void, check: (n: number) => string | null): HTMLElement {
+  function documentedEditor(prefix: string, label: string, unit: string, get: () => DocumentedValue | null, set: (v: DocumentedValue | null) => void, check: (n: number) => string | null, required = true): HTMLElement {
     const v = get();
     const blank = (value: number): DocumentedValue => ({ value, unit, source: '', valueType: 'unspecified', status: 'user-defined' });
     return h('fieldset', { class: 'doc-field' },
@@ -523,7 +593,11 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
       v ? textField(`${prefix}-source`, 'Source (datasheet, test report, standard table …) — required', v.source, (t) => { const latest = get(); if (latest) set({ ...latest, source: t }); }, 300) : null,
       v ? selectField(`${prefix}-type`, 'Value type', THERMAL_VALUE_TYPES.map((t) => [t, t] as [ThermalValueType, string]), v.valueType, (t) => { const latest = get(); if (latest) set({ ...latest, valueType: t }); }) : null,
       v ? textField(`${prefix}-conditions`, 'Test or reference conditions (optional)', v.conditions ?? '', (t) => { const latest = get(); if (latest) set({ ...latest, conditions: t }); }, 300) : null,
-      h('p', { class: 'note' }, v ? 'Typed values are recorded as user-defined; this program does not check them.' : 'Not entered. Nothing is assumed: the element is reported as missing data until you enter a documented value.'),
+      h('p', { class: 'note' }, v
+        ? 'Typed values are recorded as user-defined; this program does not check them.'
+        : required
+          ? 'Not entered. Nothing is assumed: the element is reported as missing data until you enter a documented value.'
+          : 'Optional. Recorded with its source for the next stage; not used in this stage\'s calculation.'),
     );
   }
 
@@ -565,8 +639,8 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
         const g = (): typeof c => latest<typeof c>();
         parts.push(
           documentedEditor('u', 'Overall U-value U_w', 'W/(m²·K)', () => g()?.uValue ?? null, (v) => commitComponent({ ...g(), uValue: v }), positive),
-          documentedEditor('g', 'Solar energy transmittance g (stored only)', '–', () => g()?.gValue ?? null, (v) => commitComponent({ ...g(), gValue: v }), (n) => (n >= 0 && n <= 1 ? null : 'It must be between 0 and 1.')),
-          documentedEditor('fc', 'Shading reduction factor (stored only)', '–', () => g()?.shadingFactor ?? null, (v) => commitComponent({ ...g(), shadingFactor: v }), (n) => (n >= 0 && n <= 1 ? null : 'It must be between 0 and 1.')),
+          documentedEditor('g', 'Solar energy transmittance g (stored only)', '–', () => g()?.gValue ?? null, (v) => commitComponent({ ...g(), gValue: v }), (n) => (n >= 0 && n <= 1 ? null : 'It must be between 0 and 1.'), false),
+          documentedEditor('fc', 'Shading reduction factor (stored only)', '–', () => g()?.shadingFactor ?? null, (v) => commitComponent({ ...g(), shadingFactor: v }), (n) => (n >= 0 && n <= 1 ? null : 'It must be between 0 and 1.'), false),
           h('p', { class: 'note' }, 'Solar gains are NOT calculated in this stage (they need solar irradiance per orientation, from weather data). Only conduction U·A·ΔT is calculated.'),
         );
       } else if (c.type === 'door') {
@@ -628,14 +702,14 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   }
 
   function resultBlock(r: ComponentResult): Node[] {
-    const fact = (k: string, v: string): Node[] => [h('dt', {}, k), h('dd', {}, v)];
+    const fact = (k: string, v: string, term?: GlossaryTerm): Node[] => [h('dt', {}, k, term ? helpTip(term) : null), h('dd', {}, v)];
     const facts: Node[] = [];
-    if (r.uValueWPerM2K !== null) facts.push(...fact('U-value', `${show(r.uValueWPerM2K, 4)} W/(m²·K)`));
-    if (r.totalResistanceM2KPerW !== null) facts.push(...fact('R_total', `${show(r.totalResistanceM2KPerW, 4)} m²·K/W`));
+    if (r.uValueWPerM2K !== null) facts.push(...fact('U-value', `${show(r.uValueWPerM2K, 4)} W/(m²·K)`, 'u-value'));
+    if (r.totalResistanceM2KPerW !== null) facts.push(...fact('R_total', `${show(r.totalResistanceM2KPerW, 4)} m²·K/W`, 'r-value'));
     if (r.layersResistanceM2KPerW !== null) facts.push(...fact('Σ d/λ (layers only)', `${show(r.layersResistanceM2KPerW, 4)} m²·K/W`));
-    if (r.surface) facts.push(...fact('Surface resistances', `R_si ${show(r.surface.insideM2KPerW, 3)}, R_se ${show(r.surface.outsideM2KPerW, 3)} m²·K/W for ${r.surface.heatFlow} heat flow (${r.surface.status})`));
+    if (r.surface) facts.push(...fact('Surface resistances R_si / R_se', `R_si ${show(r.surface.insideM2KPerW, 3)}, R_se ${show(r.surface.outsideM2KPerW, 3)} m²·K/W for ${r.surface.heatFlow} heat flow (${r.surface.status})`));
     if (r.otherSideC !== null) facts.push(...fact('Other side', `${show(r.otherSideC, 4)} °C; ΔT = ${show(r.deltaTK ?? NaN, 4)} K`));
-    if (r.heatFlowW !== null) facts.push(...fact('Heat flow Q̇', flowWords(r.heatFlowW)));
+    if (r.heatFlowW !== null) facts.push(...fact('Heat flow Q̇', flowWords(r.heatFlowW), 'heat-flow'));
     if (r.heatCapacity) facts.push(...fact('Heat capacity', `${show(r.heatCapacity.arealJPerM2K / 1000, 4)} kJ/(m²·K); ${show(r.heatCapacity.totalJPerK / 1e6, 4)} MJ/K (simple sum)`));
     const nodes: Node[] = [
       h('h3', {}, 'Result (steady state)'),
@@ -675,7 +749,17 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     else io.print(renderHtml(model));
     announce(format === 'print' ? 'The print dialog shows the building report; choose "Save as PDF" to keep it as a file.' : 'Building report downloaded.');
   }
-  const resultsPanel = createBuildingResultsPanel({ onSelect: (id) => select(id), onReport: makeReport });
+  const resultsPanel = createBuildingResultsPanel({
+    onSelect: (id) => select(id),
+    onFix: (id) => {
+      const c = project.components.find((x) => x.id === id);
+      const r = result.components.find((x) => x.componentId === id);
+      const target = c && r ? fixTarget(c, r) : null;
+      if (target) goFix(target);
+      else select(id);
+    },
+    onReport: makeReport,
+  });
   const sidebarToggle = h('button', { type: 'button', class: 'tool', 'aria-expanded': 'true', 'aria-controls': 'b-sidebar', 'data-role': 'b-sidebar-toggle' }, '☰ Inputs');
   const workspace = h(
     'div',
@@ -711,6 +795,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     resultsPanel.setResult(project, result, selected);
     if (editorKey !== (selected ?? '')) renderEditor();
     renderSelectedResults();
+    renderTodo();
     // Keep the last project in this browser, so a reload or the next visit continues where you left off.
     writeKey(store, STORAGE_KEYS.lastBuilding, textOf(project));
     if (libraryId) writeKey(store, STORAGE_KEYS.lastBuildingLibraryId, libraryId);
@@ -755,6 +840,8 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     select,
     openProjectText: (text, filename) => openProjectText(text, filename),
     saveToLibrary,
+    loadExample: () => replaceProject(createExampleHouse(materials()), 'Loading the example house'),
+    newBlank: () => replaceProject(createBlankProject(), 'A new blank project'),
     library,
     viewer: viewerPanel,
     ready: viewerPanel.ready,

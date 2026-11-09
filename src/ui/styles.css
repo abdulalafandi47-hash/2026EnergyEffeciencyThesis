@@ -352,3 +352,39 @@ button.danger { color: var(--error); border-color: var(--error); }
 .b-library-row.current { border-color: var(--accent); }
 .b-library-name { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
 [data-role="b-save-status"] { margin: 2px 0 6px; }
+
+/* ---- welcome dialog ---- */
+.topbar-extra { display: inline-flex; gap: 6px; align-items: center; }
+.welcome-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: rgba(5, 8, 12, 0.72); }
+.welcome-backdrop[hidden] { display: none; }
+.welcome-panel { position: relative; width: min(640px, 100%); max-height: calc(100dvh - 32px); overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); }
+.welcome-panel h2 { margin-top: 0; padding-right: 32px; }
+.welcome-close { position: absolute; top: 10px; right: 10px; }
+.welcome-choices { display: grid; gap: 8px; margin: 14px 0; }
+.welcome-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; }
+.welcome-choice span { font-size: 0.82rem; color: var(--muted); font-weight: 400; }
+.welcome-choice.primary span { color: var(--accent-text); }
+.welcome-limits ul { margin: 6px 0; padding-left: 20px; }
+.welcome-limits li { margin: 3px 0; }
+
+/* ---- "?" explanations ---- */
+.help-tip { display: inline-grid; place-items: center; width: 18px; height: 18px; min-height: 0; padding: 0; margin-left: 4px; border-radius: 50%; font-size: 0.7rem; font-weight: 700; line-height: 1; color: var(--accent); background: transparent; border: 1px solid var(--accent); vertical-align: middle; flex: none; cursor: help; }
+.help-tip[aria-expanded="true"] { background: var(--accent); color: var(--accent-text); }
+.help-pop { position: fixed; z-index: 120; padding: 10px 12px; background: var(--surface-2); color: var(--text); border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); font-size: 0.82rem; }
+.help-pop[hidden] { display: none; }
+.help-pop p { margin: 4px 0 0; }
+.help-row { font-size: 0.75rem; color: var(--muted); }
+.kpi-label { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.kpi-label-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- missing-data checklist ---- */
+.b-todo { margin-bottom: 8px; }
+.b-todo-box { border: 1px solid var(--warn); border-radius: 6px; background: var(--warn-bg); padding: 4px 8px; }
+.b-todo-box summary { cursor: pointer; color: var(--warn); font-weight: 700; }
+.b-todo-box ul { list-style: none; margin: 6px 0 2px; padding: 0; display: grid; gap: 4px; }
+.b-todo-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: left; padding: 4px 6px; }
+.b-todo-item span { font-size: 0.75rem; color: var(--muted); font-weight: 400; }
+.b-todo-done { color: var(--ok); font-weight: 600; margin: 0 0 6px; }
+/* In the narrow building sidebar each fact's label sits above its value. */
+.b-results .facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.b-results .facts dd { margin: 0 0 6px; overflow-wrap: anywhere; }

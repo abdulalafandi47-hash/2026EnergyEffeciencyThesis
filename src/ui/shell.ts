@@ -13,6 +13,7 @@ import type { BuildingWorkspaceHandle } from './buildingWorkspace';
 import { h } from './dom';
 import { browserStore, readKey, STORAGE_KEYS, writeKey } from './storage';
 import type { KeyValueStore } from './storage';
+import { createWelcome } from './welcome';
 
 export type WorkspaceMode = 'wall' | 'building';
 
@@ -25,6 +26,8 @@ export interface ShellOptions {
   confirm?: (message: string) => boolean;
   /** Browser storage for the last wall, the last building and the project library; the browser's by default, null for none. */
   store?: KeyValueStore | null;
+  /** Show the welcome dialog now; by default only on the first visit (remembered in browser storage). */
+  showWelcome?: boolean;
 }
 
 export interface ShellHandle {
@@ -33,6 +36,8 @@ export interface ShellHandle {
   wall: WallEditorHandle;
   /** The building workspace; created the first time it is opened. */
   building(): BuildingWorkspaceHandle | null;
+  /** Opens the welcome dialog (the "Help" button does the same). */
+  openWelcome(): void;
   destroy(): void;
 }
 
@@ -53,14 +58,28 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
       return b;
     });
     switches.push(buttons);
-    return h('div', { class: 'mode-switch', role: 'group', 'aria-label': 'Workspace' }, ...buttons);
+    const help = h('button', { type: 'button', class: 'tool', 'data-role': 'open-welcome', title: 'What this program does, how to start, and its limits' }, 'Help');
+    help.addEventListener('click', () => welcome.open());
+    return h('span', { class: 'topbar-extra' }, h('div', { class: 'mode-switch', role: 'group', 'aria-label': 'Workspace' }, ...buttons), help);
   }
 
+  const store = options.store === undefined ? browserStore() : options.store;
+  const welcome = createWelcome({
+    onExample: () => {
+      setMode('building');
+      building?.loadExample();
+    },
+    onBlank: () => {
+      setMode('building');
+      building?.newBlank();
+    },
+    onWall: () => setMode('wall'),
+    onClose: () => void writeKey(store, STORAGE_KEYS.welcomeSeen, '1'),
+  });
   const wallRoot = h('div', { 'data-workspace': 'wall' });
   const buildingRoot = h('div', { 'data-workspace': 'building', hidden: true });
-  root.replaceChildren(wallRoot, buildingRoot);
+  root.replaceChildren(wallRoot, buildingRoot, welcome.element);
 
-  const store = options.store === undefined ? browserStore() : options.store;
   let restoring = true;
   const wall: WallEditorHandle = mountWallEditor(wallRoot, BUILT_IN_MATERIALS, {
     ...(options.viewerFactory ? { viewerFactory: options.viewerFactory } : {}),
@@ -94,12 +113,14 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
   }
 
   setMode(mode);
+  if (options.showWelcome ?? readKey(store, STORAGE_KEYS.welcomeSeen) !== '1') welcome.open();
 
   return {
     getMode: () => mode,
     setMode,
     wall,
     building: () => building,
+    openWelcome: () => welcome.open(),
     destroy(): void {
       wall.destroy();
       building?.destroy();
