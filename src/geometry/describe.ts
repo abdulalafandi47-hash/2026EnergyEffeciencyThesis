@@ -14,6 +14,6 @@ export function describeLayout(layout: WallLayout): string {
   return (
     `3D model of a wall ${metres(layout.widthM)} wide and ${metres(layout.heightM)} high, total thickness ${formatThickness(layout.totalThicknessM)}, ` +
     `${layout.layers.length} layer${layout.layers.length === 1 ? '' : 's'} from the interior face to the exterior face: ${layers}. ` +
-    `Showing ${view}. Colours identify material categories, not temperatures.`
+    `Showing ${view}. With the thermal overlay on, colours are calculated steady-state temperatures; with it off, they identify material categories.`
   );
 }

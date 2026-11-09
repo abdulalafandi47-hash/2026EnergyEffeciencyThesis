@@ -1,19 +1,10 @@
-import { numberIssue } from '../engine';
+import { DATA_STATUSES as STATUSES, isBlank, isRecord, numberIssue } from '../engine';
 import type { ValidationIssue } from '../engine';
 import { MATERIAL_CATEGORIES, SI_MATERIAL_UNITS, SOURCE_TYPES, THERMAL_VALUE_TYPES } from './types';
 import type { MaterialRecord } from './types';
 
-const STATUSES: readonly unknown[] = ['verified', 'unverified', 'illustrative', 'user-defined'];
 const CATEGORIES: readonly unknown[] = MATERIAL_CATEGORIES;
 const ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isBlank(value: unknown): boolean {
-  return typeof value !== 'string' || value.trim() === '';
-}
 
 /** True for a real calendar date written YYYY-MM-DD. */
 export function isIsoDate(value: unknown): boolean {

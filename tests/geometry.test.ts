@@ -309,7 +309,7 @@ describe('describeLayout (text alternative for the 3D picture)', () => {
     expect(text).toContain('4 layers from the interior face to the exterior face');
     expect(text).toContain('1. Layer a, 15 mm; 2. Layer b, 200 mm; 3. Layer c, 80 mm; 4. Layer d, 20 mm');
     expect(text).toContain('assembled view, true proportions');
-    expect(text).toContain('Colours identify material categories, not temperatures');
+    expect(text).toContain('With the thermal overlay on, colours are calculated steady-state temperatures; with it off, they identify material categories.');
   });
   it('states exaggeration and exploded mode, and the true thickness is still used', () => {
     const text = describeLayout(layoutWall(wall(), { exploded: true, thicknessScale: 5 }));

@@ -67,6 +67,8 @@ export interface WallEditorOptions {
   viewerFactory?: ViewerFactory;
   /** Saving files, printing and the clock. Tests pass a replacement; the browser version is the default. */
   io?: FileIo;
+  /** Extra element placed in the top bar (the workspace switch). */
+  topbarExtra?: HTMLElement;
 }
 
 /** Result of opening a saved wall. */
@@ -327,6 +329,7 @@ export function mountWallEditor(
       { class: 'topbar' },
       sidebarToggle,
       h('h1', {}, 'Wall Thermal Simulator'),
+      options.topbarExtra ?? null,
       h('span', { class: 'mode-chip' }, 'Steady-state wall analysis'),
       h('span', { class: 'file-tools' }, saveButton, openButton, openInput),
       h('details', { class: 'policy' }, h('summary', {}, 'Data policy: illustrative values, not approved Cypriot design values'), h('p', {}, DATA_POLICY)),
@@ -670,6 +673,15 @@ export function mountWallEditor(
             views,
             thermal: analysis ? thermalOverlayFromAnalysis(analysis, views) : null,
             thermalNote: analysis?.usesUnverifiedData ? 'Uses illustrative or unverified material data: not a design value.' : '',
+            results: analysis
+              ? {
+                  uValueWPerM2K: analysis.result.uValueWPerM2K,
+                  totalResistanceM2KPerW: analysis.result.resistance.totalM2KPerW,
+                  heatTransferW: analysis.result.heatTransfer.magnitudeW,
+                  direction: analysis.result.heatTransfer.direction,
+                  areaM2: analysis.result.geometry.areaM2,
+                }
+              : null,
           }
         : null,
       !result.ok,

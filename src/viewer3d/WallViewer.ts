@@ -9,9 +9,9 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { describeLayout, gridSpec, spreadLabels, temperatureFraction, thermalCss } from '../geometry';
+import { AXES, axesSpec, describeLayout, gridSpec, spreadLabels, temperatureFraction, thermalCss } from '../geometry';
 import type { FlowDirection, ThermalOverlay, WallLayout } from '../geometry';
-import { applyThermalOverlay, buildGround, createWallScene, disposeWallScene, pickLayer, setSelection, stepWallScene, syncHeatFlow, syncWallScene } from './sceneBuilder';
+import { applyThermalOverlay, buildAxes, buildGround, createWallScene, disposeAxes, disposeWallScene, pickLayer, setSelection, stepWallScene, syncHeatFlow, syncWallScene } from './sceneBuilder';
 import type { NavigationMode, ViewerHandlers, ViewPreset, WallViewer } from './types';
 
 const FOV_DEGREES = 40;
@@ -21,6 +21,8 @@ const VIEW_DIRECTIONS: Record<ViewPreset, [number, number, number]> = {
   interior: [-1, 0, 0],
   exterior: [1, 0, 0],
   section: [0, 0, 1],
+  // Not exactly vertical: a straight-down camera would leave "up" undefined. 1° tilt is not visible.
+  top: [0, 1, 0.0175],
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
@@ -80,6 +82,9 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
   let gridVisible = true;
   let grid: THREE.GridHelper | null = null;
   let gridKey = '';
+  let axesVisible = true;
+  let axes: THREE.Group | null = null;
+  let axesKey = '';
   let navigationMode: NavigationMode = 'orbit';
   let labelsVisible = true;
   let destroyed = false;
@@ -88,6 +93,12 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
   const interiorLabel = el('div', 'viewer-face viewer-face-interior', 'INTERIOR FACE');
   const exteriorLabel = el('div', 'viewer-face viewer-face-exterior', 'EXTERIOR FACE');
   overlay.append(interiorLabel, exteriorLabel);
+  const axisLabels = AXES.map((axis) => {
+    const label = el('div', `viewer-axis viewer-axis-${axis.id}`, axis.label);
+    label.style.color = axis.color;
+    overlay.append(label);
+    return label;
+  });
 
   // ---- rendering -------------------------------------------------------------------------
   function requestRender(): void {
@@ -176,6 +187,16 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
       label.hidden = point === null;
       if (point) label.style.transform = `translate(${Math.round(point.x)}px, ${Math.round(point.y)}px) translate(-50%, -50%)`;
     }
+    // Axis letters just beyond each arrow tip.
+    const spec = axesSpec(layout);
+    spec.axes.forEach((axis, i) => {
+      const label = axisLabels[i];
+      if (!label) return;
+      const reachAxis = spec.lengthM * 1.18;
+      const point = axesVisible ? toScreen(spec.origin[0] + axis.direction[0] * reachAxis, spec.origin[1] + axis.direction[1] * reachAxis, spec.origin[2] + axis.direction[2] * reachAxis) : null;
+      label.hidden = point === null;
+      if (point) label.style.transform = `translate(${Math.round(point.x)}px, ${Math.round(point.y)}px) translate(-50%, -50%)`;
+    });
   }
 
   function draw(): void {
@@ -306,6 +327,21 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
     scene.add(grid);
   }
 
+  /** (Re)builds the coordinate axes for the current wall; skipped when nothing relevant changed. */
+  function refreshAxes(next: WallLayout): void {
+    const spec = axesSpec(next);
+    const key = JSON.stringify(spec);
+    if (key === axesKey) return;
+    axesKey = key;
+    if (axes) {
+      scene.remove(axes);
+      disposeAxes(axes);
+    }
+    axes = buildAxes(spec);
+    axes.visible = axesVisible;
+    scene.add(axes);
+  }
+
   function setNavigation(mode: NavigationMode): void {
     navigationMode = mode;
     const rotate = THREE.MOUSE.ROTATE;
@@ -357,6 +393,7 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
       syncWallScene(wall, next, first || reducedMotion());
       rebuildLabels(next);
       refreshGrid(next);
+      refreshAxes(next);
       applyThermalOverlay(wall, thermal); // new boxes need the paint too
       syncHeatFlow(wall, next, flowDirection);
       setSelection(wall, selectedId);
@@ -396,6 +433,11 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
       if (grid) grid.visible = visible;
       requestRender();
     },
+    setAxesVisible(visible: boolean): void {
+      axesVisible = visible;
+      if (axes) axes.visible = visible;
+      requestRender();
+    },
     setNavigationMode: setNavigation,
     zoom(factor: number): void {
       orbit(0, 0, factor);
@@ -415,6 +457,7 @@ export function createWallViewer(container: HTMLElement, handlers: ViewerHandler
         grid.geometry.dispose();
         (grid.material as THREE.Material).dispose();
       }
+      if (axes) disposeAxes(axes);
       disposeWallScene(wall);
       renderer.dispose();
       canvas.remove();

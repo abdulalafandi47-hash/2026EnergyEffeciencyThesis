@@ -1,16 +1,7 @@
-import { numberIssue } from './validation';
+import { DATA_STATUSES as STATUSES, isBlank, isRecord, numberIssue } from './validation';
 import type { ValidationIssue } from './types';
 
 const ORIENTATIONS: readonly unknown[] = ['horizontal', 'upwards', 'downwards'];
-const STATUSES: readonly unknown[] = ['verified', 'unverified', 'illustrative', 'user-defined'];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isBlank(value: unknown): boolean {
-  return typeof value !== 'string' || value.trim() === '';
-}
 
 /**
  * Checks a whole wall definition and returns EVERY problem found (an empty
