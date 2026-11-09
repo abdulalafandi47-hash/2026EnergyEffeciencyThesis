@@ -1,6 +1,17 @@
 import { EngineInputError } from './errors';
 import type { ValidationIssue } from './types';
 
+/** Allowed values of a data status (materials, layers, surface resistances). */
+export const DATA_STATUSES: readonly unknown[] = ['verified', 'unverified', 'illustrative', 'user-defined'];
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function isBlank(value: unknown): boolean {
+  return typeof value !== 'string' || value.trim() === '';
+}
+
 /** Lowest physically possible temperature, °C. */
 export const ABSOLUTE_ZERO_C = -273.15;
 

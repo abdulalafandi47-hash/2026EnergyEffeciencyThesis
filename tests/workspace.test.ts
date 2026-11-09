@@ -155,16 +155,27 @@ describe('results panel: tabs', () => {
   it('the headline always states the basis, and carries the numbers whenever the result tiles are not on screen', () => {
     const u = `U ${show(analysisOf().result.uValueWPerM2K, 4)} W/(m²·K)`;
     // Results tab open: the tiles show the numbers, the headline the basis only.
-    expect(text('[data-role="headline"]')).toBe('Steady state · constant air temperatures · illustrative data');
+    // The data status is a chip beside the basis (built-in materials are illustrative).
+    const chip = 'Illustrative or unverified data · not for design';
+    expect(text('[data-role="headline"]')).toBe('Steady state · constant air temperatures');
+    expect(text('[data-role="data-status"]')).toBe(chip);
+    // The chip sits beside the headline, not inside it, so the headline's one-line clipping cannot hide it.
+    expect(root.querySelector('[data-role="headline"] [data-role="data-status"]')).toBeNull();
     tab('compare');
     const headline = text('[data-role="headline"]');
     expect(headline).toContain('Steady state · ');
     expect(headline).toContain(u);
+    expect(text('[data-role="data-status"]')).toBe(chip);
     tab('layers');
     expect(text('[data-role="headline"]')).toBe(headline);
     tab('results');
     click(root.querySelector('[data-role="collapse"]'));
     expect(text('[data-role="headline"]')).toBe(headline); // collapsed: tiles hidden, numbers back in the headline
+  });
+
+  it('the data-status chip opens the Assumptions tab', () => {
+    click(root.querySelector('[data-role="data-status"]'));
+    expect(editor.results.getActiveTab()).toBe('assumptions');
   });
 
   it('can be collapsed to just the tab bar and headline, and enlarged', () => {

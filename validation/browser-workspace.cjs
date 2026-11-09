@@ -83,6 +83,15 @@ const CHANGED = 0.004; // > 0.4 % = "a different picture"
   check('3D picture alone is at least 60 % of the workspace', (g.stage.width * g.stage.height) / workspaceArea >= 0.6, `${(100 * (g.stage.width * g.stage.height) / workspaceArea).toFixed(1)} %`);
   check('sidebar is a compact left column (<= 320 px)', g.sidebar.width <= 320 && g.sidebar.left === 0, `${Math.round(g.sidebar.width)} px`);
   check('results panel is a compact bottom panel (<= 30 % of the height)', g.results.height / g.col.height <= 0.3, `${(100 * g.results.height / g.col.height).toFixed(0)} %`);
+  // The data-status chip must be really visible (not clipped by the one-line headline, not covered).
+  const chipShown = await page.evaluate(() => {
+    const el = document.querySelector('[data-role="data-status"]');
+    if (!el) return false;
+    const c = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2);
+    return c.width > 0 && c.right <= innerWidth + 1 && (el === hit || el.contains(hit));
+  });
+  check('the "Illustrative or unverified data" chip is visible beside the results', chipShown);
   check('page itself does not scroll (workspace fills the window)', await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1));
   await page.screenshot({ path: OUT + '/workspace.png' });
 

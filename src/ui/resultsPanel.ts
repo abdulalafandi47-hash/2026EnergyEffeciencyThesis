@@ -118,6 +118,8 @@ export function createResultsPanel(options: {
 
   // ---- shell ---------------------------------------------------------------------------------------------
   const headline = h('span', { class: 'headline', 'data-role': 'headline' });
+  /** Holds the data-status chip. Outside the headline, so the headline's one-line clipping never hides it. */
+  const statusSlot = h('span', { class: 'status-slot' });
   const panels = new Map<TabId, HTMLElement>();
   const tabButtons = new Map<TabId, HTMLButtonElement>();
   const configurationHost = h('div', { 'data-role': 'configuration-host' });
@@ -147,7 +149,7 @@ export function createResultsPanel(options: {
   const element = h(
     'section',
     { id: 'results', class: 'results-panel', 'aria-label': 'Calculation results' },
-    h('div', { class: 'results-head' }, tablist, headline, h('span', { class: 'results-actions' }, sizeButton, collapseButton)),
+    h('div', { class: 'results-head' }, tablist, headline, statusSlot, h('span', { class: 'results-actions' }, sizeButton, collapseButton)),
     body,
   );
   collapseButton.addEventListener('click', () => {
@@ -628,17 +630,23 @@ export function createResultsPanel(options: {
     const a = input.analysis;
     if (!a) {
       headline.textContent = 'No valid wall yet';
+      statusSlot.replaceChildren();
       return;
     }
     const r = a.result;
-    const notes = `${input.stale ? ' · last valid wall' : ''}${a.usesUnverifiedData ? ' · illustrative data' : ''}`;
+    const stale = input.stale ? ' · last valid wall' : '';
+    // The data status sits next to the numbers it qualifies and opens the assumptions that explain it.
+    const status = a.usesUnverifiedData
+      ? h('button', { type: 'button', class: 'status-chip', 'data-role': 'data-status', title: 'Open the assumptions and data status' }, 'Illustrative or unverified data · not for design')
+      : null;
+    status?.addEventListener('click', () => selectTab('assumptions', true));
     // While the Results tab's tiles are visible they show the numbers, so the headline keeps only the basis
     // (and the header fits on one line). Collapsed, or on any other tab, the headline carries the numbers.
-    if (active === 'results' && !collapsed) {
-      headline.textContent = `Steady state · constant air temperatures${notes}`;
-      return;
-    }
-    headline.textContent = `Steady state · U ${show(r.uValueWPerM2K, 4)} W/(m²·K) · R ${show(r.resistance.totalM2KPerW, 4)} m²·K/W · Q̇ ${show(r.heatTransfer.magnitudeW, 4)} W ${r.heatTransfer.direction === 'none' ? '' : r.heatTransfer.direction}${input.stale ? ' · last valid wall' : ''}${a.usesUnverifiedData ? ' · illustrative data' : ''}`;
+    const text = active === 'results' && !collapsed
+      ? `Steady state · constant air temperatures${stale}`
+      : `Steady state · U ${show(r.uValueWPerM2K, 4)} W/(m²·K) · R ${show(r.resistance.totalM2KPerW, 4)} m²·K/W · Q̇ ${show(r.heatTransfer.magnitudeW, 4)} W ${r.heatTransfer.direction === 'none' ? '' : r.heatTransfer.direction}${stale}`;
+    headline.textContent = text;
+    statusSlot.replaceChildren(...(status ? [status] : []));
   }
 
   function render(): void {
