@@ -1,8 +1,8 @@
-# Limitations (Stage 8)
+# Limitations (Stage 8, plus the building envelope)
 
 This is the single list of what the application does **not** do, what that means for its results, and what would be needed to remove each limitation. It gathers the limits stated piecemeal in the other documents. If a statement here and elsewhere disagree, treat it as a defect and correct both.
 
-Short version: the program calculates the **steady-state** thermal performance of **one multilayer wall** made of **homogeneous layers**, using the textbook ISO 6946-style series-resistance method. Its arithmetic is well tested. Its **material data are demonstration values**, its surface resistances are **unverified**, it has **not** been compared with measurements or certified software, and it makes **no compliance claim**.
+Short version: the program calculates the **steady-state** thermal performance of **one multilayer wall** made of **homogeneous layers** (and, in the building-envelope workspace, of each element of a **simplified single-zone box**, one element at a time), using the textbook ISO 6946-style series-resistance method. Its arithmetic is well tested. Its **material data are demonstration values**, its surface resistances are **unverified**, it has **not** been compared with measurements or certified software, and it makes **no compliance claim**.
 
 Each limitation has an id (M = model, D = data, S = standards and regulation, V = verification and validation, A = application software) so the thesis can refer to it.
 
@@ -20,6 +20,13 @@ Each limitation has an id (M = model, D = data, S = standards and regulation, V 
 | M8 | **Energy = power × duration under constant conditions.** | The kWh figure is **not** an annual energy demand and cannot be compared with energy certificates. | Weather data and a dynamic or degree-hour method. |
 | M9 | **Heat capacity is a simple sum** (Σ ρ·c_p·V). | It says how much heat the wall can store per kelvin. It does not predict how the wall responds to changing temperatures, and layer order does not affect it. | A transient model (M1). |
 | M10 | **No Cypriot climate data** are used. The brief's long-term aim, energy efficiency under Cyprus climatic conditions, is not started. | Boundary temperatures are whatever the user types. | Verified climate data (for example a typical meteorological year for a Cypriot location) and a dynamic model. |
+| M11 | **Building envelope: a simplified single-zone box.** One storey, one conditioned zone, a flat roof, rectangular plan, walls spanning whole sides (corners counted in both walls), partitions only north–south across the full depth. | Real plans, pitched roofs, several storeys or zones cannot be modelled. Corner double-counting slightly overstates wall area. | A general geometry model (polygons, storeys, zones), or import from a BIM model; out of scope. |
+| M12 | **Envelope elements are calculated independently** and added up (Σ Uᵢ·Aᵢ·ΔTᵢ). No zone heat balance, no air temperature that responds, no heat exchange between zones. | The total is a conductive heat flow for fixed temperatures, not a load or demand. | A zone heat-balance model with weather (the next stage). |
+| M13 | **Ground-contact floors are not calculated** (EN ISO 13370 not implemented). They are reported as *Unsupported* and left out of the total. | The total of a house on a ground slab misses the floor. | Implement the EN ISO 13370 method after reading the standard (perimeter, characteristic dimension, soil properties, edge insulation). |
+| M14 | **No solar gains.** Window g-values and shading factors are stored but not used; solar radiation on opaque surfaces is ignored. | In a Cyprus summer, solar gains through glazing usually dominate; the envelope total here is conduction only. | Solar irradiance per orientation from weather data, and a gains model (next stage). |
+| M15 | **No thermal bridges or junctions** in the envelope (wall–roof, wall–floor, corners, window reveals, lintels, balconies), and nothing is added for window installation. | Real heat transfer is normally higher. | Linear and point thermal transmittances (ψ, χ) from a checked source or a numerical calculation. |
+| M16 | **Windows and doors are only as good as their documented U-values.** The program has no window or door data of its own and does not check typed values. | An element is either calculated from a value the user documented, or excluded. | Users record datasheets or test reports as the source. |
+| M17 | **Unconditioned spaces have a fixed, user-entered temperature**, and the internal surface resistance is used on both sides of an element next to them (unverified simplification). | No calculation of the space's own temperature (temperature-adjustment factors for unconditioned spaces are not implemented). | A checked method for unconditioned-space temperatures. |
 
 ## 2. Data
 
@@ -31,6 +38,8 @@ Each limitation has an id (M = model, D = data, S = standards and regulation, V 
 | D4 | **Measured, declared and design values are not converted.** The program records which kind a value is, but does not convert between them. | A declared (manufacturer) λ is not automatically a design λ for a Cypriot wall. | Implementing EN ISO 10456 conversions, after checking the standard. |
 | D5 | **Surface-resistance preset is unverified**: three secondary sources agree, the standard itself was not read. | U-values depend on these numbers (they add 0.17 m²·K/W to R_total). | Check against ISO 6946 (`docs/sources.md`, section 2 checklist). |
 | D6 | **Material data are stored by id.** A saved wall uses the built-in values of the program that opens it. | If the built-in database changes, an old wall gives new numbers. The file keeps a snapshot and the program warns about differences. | Nothing more is needed; keep the warning. |
+| D7 | **The example house is illustrative.** Its dimensions, layers and condition were chosen for demonstration; it is not a real or verified building. Its windows and doors deliberately have no U-values. | Its results only demonstrate the tool. The screen labels it. | Use a real building's documented data. |
+| D8 | **Roof/floor surface-resistance presets (0.10 and 0.17 m²·K/W) are unverified**, like the wall preset (D5), and so is using R_si on both sides next to an unconditioned space. | Roof and floor U-values depend on them. | The ISO 6946 checklist in `docs/sources.md`, section 2. |
 
 ## 3. Standards and regulation
 
@@ -73,4 +82,4 @@ Within the limits above, and with real (sourced) input values:
 - comparisons that change one thing at a time, with everything else held identical;
 - a complete record of inputs, assumptions, equations and data status in every report.
 
-It should not be relied on for design decisions, compliance, dynamic behaviour, moisture risk or annual energy use.
+It should not be relied on for design decisions, compliance, dynamic behaviour, moisture risk, solar gains, cooling or heating loads, or annual energy use.

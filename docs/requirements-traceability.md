@@ -1,4 +1,4 @@
-# Requirements traceability (Stage 8)
+# Requirements traceability (Stage 8 and the building envelope)
 
 Every requirement of the project brief, where it is implemented, how it is checked, and its status. Statuses:
 
@@ -121,3 +121,22 @@ File names in the "Evidence" column are in `tests/` unless stated.
 | No unnecessary dependencies, no authentication, payments, cloud databases, AI APIs or whole-building simulation | runtime dependency: `three` only; nothing leaves the browser (`browser-e2e.cjs`: no request to another site) | Met |
 | Works locally without paid APIs or services | `npm run dev`; optional free GitHub Pages preview | Met |
 | Eight stages, each tested and summarised | one branch per stage (`feature/stage-2…8`), validation log | Met |
+
+## 14. Building envelope (stage brief "Expand to a complete building envelope")
+
+| Requirement | Implementation | Evidence | Status |
+|---|---|---|---|
+| Components: exterior walls, partitions, roof, ground floor, floor over outside/unconditioned space, windows, glazed doors, opaque doors | `src/envelope/types.ts` | `envelope` | Met (one roof and one floor; flat roof only, M11) |
+| Blank project, or an editable, resettable, clearly labelled example house | `createBlankProject`, `createExampleHouse`, `EXAMPLE_NOTE` | `envelope`, `buildingUi` | Met (example illustrative, D7) |
+| Reuse the wall calculation for layered elements (R, R_total, U, Q̇, temperatures, heat capacity) | `calculateComponent` → `calculateWall` | `envelope` (hand calculations) | Met |
+| Surface resistances appropriate to each element | `heatFlowForSurfaces`, `surfaceResistancesFor` | `envelope` | Met, with limits (presets unverified, D5, D8) |
+| Windows: documented U, area, orientation, g-value, shading | `Glazing`, `DocumentedValue` | `envelope`, `buildingUi` | Met; g and shading stored only (M14) |
+| Doors: documented U or layers | `Door.spec` | `envelope`, `buildingUi` | Met |
+| Conduction distinguished from solar gains | conduction only; solar explicitly not calculated and stated | assumptions list | Met (solar gains not started, M14) |
+| Ground floors: documented method or marked unsupported | marked *Unsupported* (EN ISO 13370 not implemented) | `envelope` | Met as "unsupported" (M13) |
+| 3D: all components, large viewport, orbit/zoom/pan/reset, architectural views, select/highlight/inspect/edit, hide/show, openings cut into walls, parametric | `src/geometry/house.ts`, `src/viewer3d/house*.ts`, `src/ui/houseViewerPanel.ts` | `house`, `houseScene`, `buildingUi`, `browser-building.cjs` | Met (viewport 82 % of the width at 1440 × 900) |
+| Component editor: name, type, dimensions, area, orientation, layers/properties, sources, boundary conditions, results; create/duplicate/edit/delete with safeguards | `src/ui/buildingWorkspace.ts`, `src/envelope/edit.ts` | `buildingUi`, `envelope` | Met |
+| Envelope results: areas by type, U and Q̇ per element, Σ Uᵢ·Aᵢ·ΔTᵢ with each element's ΔT, contributions, missing/unsupported/assumptions; partitions not counted as losses | `calculateEnvelope`, `src/ui/buildingResults.ts` | `envelope`, `buildingUi` | Met |
+| Traceability of documented values (value, unit, source, type, conditions) | `DocumentedValue`; a value without a source is refused | `envelope`, `buildingUi` | Met; unit conversions of documented values are not offered (values are entered in W/(m²·K)) |
+| Verify EN ISO 6946 / 10456 editions; no Cyprus compliance claims | `docs/sources.md` (editions from catalogue searches; texts not read) | — | Partly met (S1, S2) |
+| Out of scope: dynamic/hourly simulation, annual energy, cooling demand, EnergyPlus/OpenStudio, HVAC, detailed ventilation, BIM, payments, authentication, cloud | none implemented | `architecture` (runtime dependency `three` only) | Respected |
