@@ -328,7 +328,7 @@ export function mountWallEditor(
       'header',
       { class: 'topbar' },
       sidebarToggle,
-      h('h1', {}, 'Wall Thermal Simulator'),
+      h('h1', {}, 'Building Thermal Simulator'),
       options.topbarExtra ?? null,
       h('span', { class: 'mode-chip' }, 'Steady-state wall analysis'),
       h('span', { class: 'file-tools' }, saveButton, openButton, openInput),

@@ -64,7 +64,7 @@ export type ParseDraftResult =
   | { ok: false; error: string };
 
 const FILE_NOTE =
-  'Wall saved by the Wall Thermal Simulator. It stores what was typed in the editor and the user\'s custom materials; built-in material properties come from the program that opens it. ' +
+  'Wall saved by the Building Thermal Simulator. It stores what was typed in the editor and the user\'s custom materials; built-in material properties come from the program that opens it. ' +
   'Built-in material values are illustrative, not approved design values.';
 
 /**

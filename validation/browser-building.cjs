@@ -66,7 +66,7 @@ async function axeScan(page, label) {
   // ---- switch ----------------------------------------------------------------------------------
   await page.goto(URL);
   await page.waitForSelector('[data-workspace="wall"] .viewer-canvas');
-  check('opens on the single-wall calculator', (await page.textContent('[data-workspace="wall"] h1')) === 'Wall Thermal Simulator');
+  check('opens on the single-wall calculator', (await page.textContent('[data-workspace="wall"] h1')) === 'Building Thermal Simulator');
   await page.click('[data-workspace="wall"] [data-mode="building"]');
   await page.waitForSelector('[data-workspace="building"] .viewer-canvas');
   check('switch opens the building workspace', await page.isVisible('[data-workspace="building"] h1'));

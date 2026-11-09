@@ -2,7 +2,7 @@
   "name": "building-thermal-simulator",
   "version": "0.1.0",
   "private": true,
-  "description": "Multilayer wall thermal performance calculator (steady-state, ISO 6946-style) for a Civil and Environmental Engineering thesis.",
+  "description": "Building Thermal Simulator: steady-state thermal analysis of residential building envelopes (walls, roofs, floors, windows, doors) with a 3D workspace, for a Civil and Environmental Engineering thesis.",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"

@@ -1,6 +1,6 @@
-# Building Thermal Performance & Energy Efficiency Simulator
+# Building Thermal Simulator
 
-Thesis project (Civil and Environmental Engineering): a browser application that lets a user build a multilayer wall from materials and dimensions, calculates its steady-state thermal properties, shows it in interactive 3D, compares alternatives and writes a calculation report.
+Thesis project (Civil and Environmental Engineering). The research objective is to investigate how insulation, thermal mass, solar gains and building-envelope characteristics influence residential cooling demand in Cyprus. The application is a 3D-first browser tool with two linked workspaces: a **single-wall calculator** (build a multilayer wall, get its steady-state thermal properties, compare alternatives, write a calculation report) and a **building envelope** workspace (walls, partitions, roof, floor, windows and doors of a simplified house, each calculated in steady state). Dynamic simulation with Cyprus weather, solar gains and cooling demand are future stages, not implemented yet.
 
 ## Current status: all 8 stages done (Stage 8: whole-application testing and limitations)
 

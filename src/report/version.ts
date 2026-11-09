@@ -3,7 +3,7 @@
  * the software that produced it. Keep `SOFTWARE_VERSION` equal to the version in
  * package.json (a test checks this).
  */
-export const SOFTWARE_NAME = 'Wall Thermal Simulator';
+export const SOFTWARE_NAME = 'Building Thermal Simulator';
 export const SOFTWARE_VERSION = '0.1.0';
 
 export const REPORT_SCHEMA = 'building-thermal-simulator.report';

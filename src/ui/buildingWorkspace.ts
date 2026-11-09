@@ -515,7 +515,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     { class: 'workspace building-workspace' },
     h('header', { class: 'topbar' },
       sidebarToggle,
-      h('h1', {}, 'Building Envelope'),
+      h('h1', {}, 'Building Thermal Simulator'),
       options.topbarExtra ?? null,
       h('span', { class: 'mode-chip' }, 'Steady-state element calculations'),
       h('details', { class: 'policy' }, h('summary', {}, 'Scope: steady state, not an energy simulation'), h('p', {}, 'Each element is calculated on its own for one constant condition (Q̇ = U·A·ΔT). This is not an hourly, annual or cooling-demand simulation and not a compliance check. Built-in material values are illustrative; window and door values must come from documented sources.')),

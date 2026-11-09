@@ -71,7 +71,7 @@ async function axeScan(page, label) {
   await page.goto(URL);
   await page.waitForSelector('canvas.viewer-canvas');
   const loadMs = Date.now() - t0;
-  check('app loads from a sub-folder address (as on GitHub Pages)', (await page.textContent('h1')) === 'Wall Thermal Simulator');
+  check('app loads from a sub-folder address (as on GitHub Pages)', (await page.textContent('h1')) === 'Building Thermal Simulator');
   check('every file it asks for is found (no 404)', responses.every((r) => r.status < 400), responses.filter((r) => r.status >= 400).map((r) => r.url).join(', '));
   const origin = new globalThis.URL(URL).origin;
   check('nothing is fetched from other sites', responses.every((r) => r.url.startsWith(origin) || r.url.startsWith('data:') || r.url.startsWith('blob:')), responses.filter((r) => !r.url.startsWith(origin)).map((r) => r.url).join(', '));

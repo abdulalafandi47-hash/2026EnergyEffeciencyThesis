@@ -53,7 +53,7 @@ const analysisOf = () => {
 // ---------------------------------------------------------------------------
 describe('workspace layout', () => {
   it('has a top bar, an input sidebar, a 3D viewport and a results panel', () => {
-    expect(root.querySelector('header.topbar h1')?.textContent).toBe('Wall Thermal Simulator');
+    expect(root.querySelector('header.topbar h1')?.textContent).toBe('Building Thermal Simulator');
     expect(root.querySelector('aside#sidebar')).not.toBeNull();
     expect(root.querySelector('main.stage-column #viewer')).not.toBeNull();
     expect(root.querySelector('main.stage-column #results')).not.toBeNull();
