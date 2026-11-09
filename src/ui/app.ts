@@ -11,6 +11,12 @@
  *  - structural changes (add/remove/move layer, choose material, change unit)
  *    rebuild the affected part of the page, then restore keyboard focus.
  */
+import { History, isTextEntry, undoShortcut } from './history';
+import type { UnitChoice } from './units';
+import { addResultsResizer, makeCollapsible } from './layoutControls';
+import { browserStore } from './storage';
+import type { KeyValueStore } from './storage';
+import { helpTip } from './glossary';
 import {
   addLayer,
   buildWall,
@@ -69,6 +75,10 @@ export interface WallEditorOptions {
   io?: FileIo;
   /** Extra element placed in the top bar (the workspace switch). */
   topbarExtra?: HTMLElement;
+  /** Called after every change of the wall or the custom materials (used to keep the last wall in the browser). */
+  onChange?: () => void;
+  /** Browser storage for viewer conveniences (the results panel height); the browser's by default, null for none. */
+  store?: KeyValueStore | null;
 }
 
 /** Result of opening a saved wall. */
@@ -91,6 +101,23 @@ export interface WallEditorHandle {
   openWallText(text: string, filename?: string): OpenWallOutcome;
   /** Resolves once the 3D viewer has been created or found unavailable. */
   ready: Promise<void>;
+  /** The current wall as the text of a wall file (inputs as typed, with the custom materials). */
+  serialize(): string;
+  /**
+   * Switches the temperature unit and every layer's thickness unit (typed numbers are converted, so the
+   * wall stays the same). Used to keep the units the same as in the building workspace.
+   */
+  setUnits(units: UnitChoice): void;
+  /** The wall's temperature unit, and its layers' thickness unit when all layers share one (else null). */
+  getUnits(): { temperature: TemperatureUnit; thickness: LengthUnit | null };
+  /** Takes back / repeats the last change of the wall (false when there is nothing to undo or redo). */
+  undo(): boolean;
+  redo(): boolean;
+  /**
+   * Adds custom materials that arrived in another file (a building project). A record with the same id
+   * replaces the session's; only records that passed the file checks may be passed in.
+   */
+  importCustomMaterials(records: readonly MaterialRecord[]): void;
   /** Releases the 3D viewer. */
   destroy(): void;
 }
@@ -114,6 +141,12 @@ const STATUS_TEXT: Record<string, string> = {
   'user-defined': 'User-defined',
 };
 
+/** `current` with `incoming` added; an incoming record replaces one with the same id. */
+const mergeCustom = (current: readonly MaterialRecord[], incoming: readonly MaterialRecord[]): MaterialRecord[] => {
+  const ids = new Set(incoming.map((m) => m.id));
+  return [...current.filter((m) => !ids.has(m.id)), ...incoming];
+};
+
 const fieldDomId = (field: string): string => `f-${field.replace(/[^a-zA-Z0-9]+/g, '-')}`;
 
 export function mountWallEditor(
@@ -128,6 +161,12 @@ export function mountWallEditor(
   let draft: WallDraft = createInitialDraft(materials);
   let materialFilter = '';
   let result: BuildResult = buildWall(draft, allMaterials());
+  const history = new History<WallDraft>();
+  /** The draft as last shown; a different one in refresh() means a change to record. */
+  let lastSeenDraft: WallDraft | null = null;
+  let applyingHistory = false;
+  /** Time of the last typed character, to merge typing into one undo step. */
+  let lastTypedAt = Number.NEGATIVE_INFINITY;
 
   /** Inputs and their message areas, by field id, for refreshing validation text. */
   const inputs = new Map<string, HTMLInputElement | HTMLSelectElement>();
@@ -221,8 +260,8 @@ export function mountWallEditor(
   const customSurfaceBox = h(
     'div',
     { class: 'grid', 'data-role': 'custom-surface' },
-    fieldRow(FIELD.surfaceInside, 'Internal surface resistance R_si (m²·K/W)', surfaceInsideInput),
-    fieldRow(FIELD.surfaceOutside, 'External surface resistance R_se (m²·K/W)', surfaceOutsideInput),
+    fieldRow(FIELD.surfaceInside, 'Internal surface resistance R_si (m²·K/W)', surfaceInsideInput, [helpTip('r-si')]),
+    fieldRow(FIELD.surfaceOutside, 'External surface resistance R_se (m²·K/W)', surfaceOutsideInput, [helpTip('r-se')]),
   );
 
   const boundarySection = h(
@@ -237,7 +276,7 @@ export function mountWallEditor(
     ),
     h('div', { class: 'field inline' }, h('span', { class: 'label-text' }, 'Temperature unit'), temperatureUnit),
     h('div', { class: 'grid' }, fieldRow(FIELD.duration, 'Duration of the energy estimate (hours)', durationInput)),
-    h('div', { class: 'field' }, h('label', { for: 'f-surface-mode' }, 'Surface (air-film) resistances'), surfaceModeSelect),
+    h('div', { class: 'field' }, h('label', { for: 'f-surface-mode' }, 'Surface (air-film) resistances'), surfaceModeSelect, h('span', { class: 'help-row' }, 'What are R_si and R_se? ', helpTip('r-si'), ' ', helpTip('r-se'))),
     customSurfaceBox,
     h(
       'p',
@@ -321,6 +360,10 @@ export function mountWallEditor(
   const openButton = h('button', { type: 'button', class: 'tool', 'data-role': 'open-wall', title: 'Open a wall file saved by this program' }, 'Open wall…');
   const openInput = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'data-role': 'open-wall-input', 'aria-label': 'Wall file to open' });
   const sidebarToggle = h('button', { type: 'button', class: 'tool', 'aria-expanded': 'true', 'aria-controls': 'sidebar', 'data-role': 'sidebar-toggle' }, '☰ Inputs');
+  const undoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'undo', 'aria-label': 'Undo the last change (Ctrl+Z)', title: 'Undo (Ctrl+Z)', disabled: true }, '↶');
+  const redoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'redo', 'aria-label': 'Redo (Ctrl+Shift+Z)', title: 'Redo (Ctrl+Shift+Z)', disabled: true }, '↷');
+  undoButton.addEventListener('click', () => void undo());
+  redoButton.addEventListener('click', () => void redo());
   const workspace = h(
     'div',
     { class: 'workspace' },
@@ -328,11 +371,12 @@ export function mountWallEditor(
       'header',
       { class: 'topbar' },
       sidebarToggle,
-      h('h1', {}, 'Wall Thermal Simulator'),
+      h('h1', {}, 'Building Thermal Simulator'),
       options.topbarExtra ?? null,
       h('span', { class: 'mode-chip' }, 'Steady-state wall analysis'),
+      h('span', { class: 'history-tools' }, undoButton, redoButton),
       h('span', { class: 'file-tools' }, saveButton, openButton, openInput),
-      h('details', { class: 'policy' }, h('summary', {}, 'Data policy: illustrative values, not approved Cypriot design values'), h('p', {}, DATA_POLICY)),
+      h('details', { class: 'policy' }, h('summary', { title: 'Data policy: illustrative values, not approved Cypriot design values' }, 'Data: illustrative values, not approved Cypriot design values'), h('p', {}, DATA_POLICY)),
     ),
     h(
       'div',
@@ -343,11 +387,26 @@ export function mountWallEditor(
     status,
   );
   sidebarToggle.addEventListener('click', () => {
+    // On a phone the inputs sit below the 3D view and the results: the button takes you there instead.
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 960px)').matches) {
+      workspace.querySelector('#sidebar')?.scrollIntoView({ block: 'start' });
+      return;
+    }
     const collapsed = workspace.classList.toggle('sidebar-collapsed');
     sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
     announce(collapsed ? 'Input sidebar hidden.' : 'Input sidebar shown.');
   });
   root.replaceChildren(workspace);
+  workspace.addEventListener('input', () => void (lastTypedAt = Date.now()), true);
+  workspace.addEventListener('keydown', (e) => {
+    const action = undoShortcut(e);
+    if (!action || isTextEntry(e.target)) return;
+    e.preventDefault();
+    if (action === 'undo') undo();
+    else redo();
+  });
+  for (const section of [dimensionsSection, layersSection, boundarySection]) makeCollapsible(section);
+  addResultsResizer(resultsPanel.element, workspace.querySelector('.stage-column') as HTMLElement, 'building-thermal-simulator.results-height.wall', options.store === undefined ? browserStore() : options.store);
 
   customButton.addEventListener('click', () => {
     resultsPanel.selectTab('materials');
@@ -390,8 +449,7 @@ export function mountWallEditor(
     }
     draft = parsed.draft;
     // The file's custom materials join the session's; a record with the same id is replaced by the file's.
-    const fromFile = new Set(parsed.customMaterials.map((m) => m.id));
-    customMaterials = [...customMaterials.filter((m) => !fromFile.has(m.id)), ...parsed.customMaterials];
+    customMaterials = mergeCustom(customMaterials, parsed.customMaterials);
     syncStaticInputs();
     renderLayers();
     refresh();
@@ -402,6 +460,13 @@ export function mountWallEditor(
     );
     announce(`Opened ${filename}.`);
     return { ok: true, warnings: parsed.warnings };
+  }
+
+  function importCustomMaterials(records: readonly MaterialRecord[]): void {
+    if (records.length === 0) return;
+    customMaterials = mergeCustom(customMaterials, records);
+    renderLayers();
+    refresh();
   }
 
   function addCustomMaterial(input: CustomMaterialInput): AddCustomOutcome {
@@ -626,7 +691,34 @@ export function mountWallEditor(
   }
 
   /** Re-validates the draft and updates every message, readout and the summary. */
+  // ---- undo / redo: the draft is an immutable value, so each change can be taken back ----
+  function showFromHistory(next: WallDraft, what: string): void {
+    applyingHistory = true;
+    draft = next;
+    syncStaticInputs();
+    renderLayers();
+    refresh();
+    applyingHistory = false;
+    announce(`${what}.`);
+  }
+  function undo(): boolean {
+    const previous = history.undo(draft);
+    if (!previous) return false;
+    showFromHistory(previous, 'Undone');
+    return true;
+  }
+  function redo(): boolean {
+    const next = history.redo(draft);
+    if (!next) return false;
+    showFromHistory(next, 'Redone');
+    return true;
+  }
+
   function refresh(): void {
+    if (lastSeenDraft && draft !== lastSeenDraft && !applyingHistory) history.record(lastSeenDraft, Date.now() - lastTypedAt < 50);
+    lastSeenDraft = draft;
+    undoButton.disabled = !history.canUndo;
+    redoButton.disabled = !history.canRedo;
     result = buildWall(draft, allMaterials());
 
     for (const [field, input] of inputs) {
@@ -688,6 +780,7 @@ export function mountWallEditor(
     );
     resultsPanel.setState(result.wall && analysis ? { wall: result.wall, views, analysis, draft, editorWarnings: result.warnings.map((w) => w.message) } : null, !result.ok);
     refreshSelectionUi();
+    options.onChange?.();
   }
 
   function renderSummary(views: LayerView[]): void {
@@ -777,6 +870,23 @@ export function mountWallEditor(
     openWallText,
     getCustomMaterials: () => customMaterials,
     addCustomMaterial,
+    serialize: () => serializeDraft(draft, allMaterials(), customMaterials),
+    setUnits(units: UnitChoice): void {
+      let next = draft.temperatureUnit === units.temperature ? draft : setTemperatureUnit(draft, units.temperature);
+      for (const layer of next.layers) if (layer.thicknessUnit !== units.thickness) next = setLayerThicknessUnit(next, layer.key, units.thickness);
+      if (next === draft) return;
+      draft = next;
+      syncStaticInputs();
+      renderLayers();
+      refresh();
+    },
+    getUnits: () => {
+      const thicknessUnits = new Set(draft.layers.map((l) => l.thicknessUnit));
+      return { temperature: draft.temperatureUnit, thickness: thicknessUnits.size === 1 ? ([...thicknessUnits][0] as LengthUnit) : null };
+    },
+    undo,
+    redo,
+    importCustomMaterials,
     ready: viewerPanel.ready,
     destroy: () => viewerPanel.destroy(),
   };

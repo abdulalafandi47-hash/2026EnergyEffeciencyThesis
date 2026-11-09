@@ -140,3 +140,23 @@ File names in the "Evidence" column are in `tests/` unless stated.
 | Traceability of documented values (value, unit, source, type, conditions) | `DocumentedValue`; a value without a source is refused | `envelope`, `buildingUi` | Met; unit conversions of documented values are not offered (values are entered in W/(m²·K)) |
 | Verify EN ISO 6946 / 10456 editions; no Cyprus compliance claims | `docs/sources.md` (editions from catalogue searches; texts not read) | — | Partly met (S1, S2) |
 | Out of scope: dynamic/hourly simulation, annual energy, cooling demand, EnergyPlus/OpenStudio, HVAC, detailed ventilation, BIM, payments, authentication, cloud | none implemented | `architecture` (runtime dependency `three` only) | Respected |
+
+## 15. Phase 2: stabilisation and usability (completion plan)
+
+| # | Requirement | Implementation | Evidence | Status |
+|---|---|---|---|---|
+| — | Name "Building Thermal Simulator" throughout | top bars, report software name, files, README, PRODUCT.md | `workspace`, `browser-*.cjs` | Met |
+| 1 | Layer editor: no truncated names, thickness field in place | each layer a card in the sidebar's width (full name with data status, material list, thickness, buttons) | `buildingUi`, `browser-building.cjs` (sidebar fits for 5 element types) | Met |
+| 2 | Building project Save/Open | `src/envelope/persist.ts`; Download / Open project file | `projectFile` (round trip, refusals, 400 random corruptions), `persistenceUi` | Met |
+| 3 | Several independent building projects | library of projects saved in this browser (save, save as copy, open, delete) | `persistenceUi` | Met, with limits (A3: per browser) |
+| 4 | Last wall and building kept between sessions | browser storage, restored on the next visit | `persistenceUi`, `browser-building.cjs`, `browser-e2e.cjs` | Met, with limits (A3) |
+| 5 | Building components and results in the report/export | `src/report/buildingReport.ts`; Report tab (HTML, Markdown, JSON, CSV, print/PDF) | `buildingReport`, `persistenceUi` | Met (reports in SI units, A12) |
+| 6 | First-visit welcome (what it does, example, blank, limitations) | `src/ui/welcome.ts`; Help reopens it | `guidanceUi`, `browser-building.cjs` (incl. axe scan) | Met |
+| 7 | Explanations of U, R, heat flow, heat flux, R_si, R_se | `src/ui/glossary.ts` ("?" buttons in both workspaces) | `guidanceUi` (presets equal to the engine's) | Met |
+| 8 | Clickable missing-data checklist | building sidebar and Not included tab: select the element and focus the field to fill in | `guidanceUi`, `browser-building.cjs` | Met |
+| 9 | Collapsible sidebar sections | `makeCollapsible` in both sidebars | `layoutUi` | Met |
+| 10 | Undo and redo | `src/ui/history.ts`; buttons and shortcuts in both workspaces | `historyUi` | Met, with limits (A4: session only) |
+| 11 | Results panel on laptops and phones | resize handle (drag / keys, remembered); phone: shorter 3D view, "Inputs" scrolls to the inputs | `layoutUi`, `browser-building.cjs` (drag, reload, Home) | Met |
+| 12 | Camera controls in a compact View menu | `viewMenu` in both 3D views | `layoutUi`, `browser-workspace.cjs`, `browser-building.cjs` | Met |
+| 13 | Blank project shows unavailable values, not 0 | building totals "—" when nothing is calculated | `buildingUi` | Met |
+| 14 | Consistent units across both workspaces | one shared temperature and thickness unit (`src/ui/units.ts`, shell) | `unitsUi` | Met, with limits (A12) |

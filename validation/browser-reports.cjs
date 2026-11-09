@@ -54,6 +54,8 @@ async function saveDownload(download, name) {
   const browser = await chromium.launch({ args: ARGS });
   const errors = [];
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  // The first-visit welcome is checked in browser-building.cjs; here it is marked as seen.
+  await context.addInitScript(() => { try { localStorage.setItem('building-thermal-simulator.welcome-seen', '1'); } catch {} });
   await context.addInitScript(() => {
     window.print = function () {
       try { window.top.__printCalls = (window.top.__printCalls || 0) + 1; window.top.__printedTitle = document.title; } catch (e) { /* cross-origin frame */ }

@@ -9,3 +9,6 @@ export { renderLayersCsv, renderJson } from './renderData';
 export { renderMarkdown } from './renderMarkdown';
 export type { Block, ReportInput, ReportModel, ReportSection } from './types';
 export { REPORT_SCHEMA, REPORT_SCHEMA_VERSION, SOFTWARE_NAME, SOFTWARE_VERSION } from './version';
+export { buildBuildingReport, buildingReportFileBase, DEFAULT_BUILDING_REPORT_TITLE, projectFingerprint, renderBuildingJson, renderElementsCsv } from './buildingReport';
+export type { BuildingReportInput } from './buildingReport';
+export { BUILDING_EQUATIONS, BUILDING_LIMITATIONS } from './content';

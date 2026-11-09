@@ -11,6 +11,11 @@ import type { WallEditorHandle } from './app';
 import { mountBuildingWorkspace } from './buildingWorkspace';
 import type { BuildingWorkspaceHandle } from './buildingWorkspace';
 import { h } from './dom';
+import { browserStore, readKey, STORAGE_KEYS, writeKey } from './storage';
+import type { KeyValueStore } from './storage';
+import { DEFAULT_UNITS, parseUnitChoice } from './units';
+import type { UnitChoice } from './units';
+import { createWelcome } from './welcome';
 
 export type WorkspaceMode = 'wall' | 'building';
 
@@ -21,6 +26,10 @@ export interface ShellOptions {
   /** Called after every switch (the browser keeps the mode in the address, e.g. #building). */
   onModeChange?: (mode: WorkspaceMode) => void;
   confirm?: (message: string) => boolean;
+  /** Browser storage for the last wall, the last building and the project library; the browser's by default, null for none. */
+  store?: KeyValueStore | null;
+  /** Show the welcome dialog now; by default only on the first visit (remembered in browser storage). */
+  showWelcome?: boolean;
 }
 
 export interface ShellHandle {
@@ -29,6 +38,8 @@ export interface ShellHandle {
   wall: WallEditorHandle;
   /** The building workspace; created the first time it is opened. */
   building(): BuildingWorkspaceHandle | null;
+  /** Opens the welcome dialog (the "Help" button does the same). */
+  openWelcome(): void;
   destroy(): void;
 }
 
@@ -49,14 +60,60 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
       return b;
     });
     switches.push(buttons);
-    return h('div', { class: 'mode-switch', role: 'group', 'aria-label': 'Workspace' }, ...buttons);
+    const help = h('button', { type: 'button', class: 'tool', 'data-role': 'open-welcome', title: 'What this program does, how to start, and its limits' }, 'Help');
+    help.addEventListener('click', () => welcome.open());
+    return h('span', { class: 'topbar-extra' }, h('div', { class: 'mode-switch', role: 'group', 'aria-label': 'Workspace' }, ...buttons), help);
   }
 
+  const store = options.store === undefined ? browserStore() : options.store;
+  // One unit choice for both workspaces, kept in this browser.
+  const UNITS_KEY = 'building-thermal-simulator.units';
+  let units: UnitChoice = parseUnitChoice(readKey(store, UNITS_KEY)) ?? DEFAULT_UNITS;
+  function shareUnits(next: UnitChoice, from: 'wall' | 'building'): void {
+    if (next.temperature === units.temperature && next.thickness === units.thickness) return;
+    units = next;
+    writeKey(store, UNITS_KEY, JSON.stringify(units));
+    if (from === 'wall') building?.setUnits(units);
+    else wall.setUnits(units);
+  }
+  /** After a change in the wall: if its units now differ from the shared choice, the building follows. */
+  function unitsFromWall(): void {
+    const w = wall.getUnits();
+    shareUnits({ temperature: w.temperature, thickness: w.thickness ?? units.thickness }, 'wall');
+  }
+  const welcome = createWelcome({
+    onExample: () => {
+      setMode('building');
+      building?.loadExample();
+    },
+    onBlank: () => {
+      setMode('building');
+      building?.newBlank();
+    },
+    onWall: () => setMode('wall'),
+    onClose: () => void writeKey(store, STORAGE_KEYS.welcomeSeen, '1'),
+  });
   const wallRoot = h('div', { 'data-workspace': 'wall' });
   const buildingRoot = h('div', { 'data-workspace': 'building', hidden: true });
-  root.replaceChildren(wallRoot, buildingRoot);
+  root.replaceChildren(wallRoot, buildingRoot, welcome.element);
 
-  const wall = mountWallEditor(wallRoot, BUILT_IN_MATERIALS, { ...(options.viewerFactory ? { viewerFactory: options.viewerFactory } : {}), topbarExtra: modeSwitch() });
+  let restoring = true;
+  const wall: WallEditorHandle = mountWallEditor(wallRoot, BUILT_IN_MATERIALS, {
+    ...(options.viewerFactory ? { viewerFactory: options.viewerFactory } : {}),
+    topbarExtra: modeSwitch(),
+    store,
+    // Keep the last wall in this browser (not while the saved one is being read back).
+    onChange: () => {
+      if (restoring) return;
+      writeKey(store, STORAGE_KEYS.lastWall, wall.serialize());
+      unitsFromWall();
+    },
+  });
+  const lastWall = readKey(store, STORAGE_KEYS.lastWall);
+  if (lastWall) wall.openWallText(lastWall, 'your last wall (restored from this browser)');
+  restoring = false;
+  // The wall shows the shared units (a restored wall keeps its own until now).
+  wall.setUnits(units);
   let building: BuildingWorkspaceHandle | null = null;
 
   function setMode(next: WorkspaceMode): void {
@@ -66,6 +123,10 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
         ...(options.houseViewerFactory ? { houseViewerFactory: options.houseViewerFactory } : {}),
         ...(options.confirm ? { confirm: options.confirm } : {}),
         getMaterials: () => [...BUILT_IN_MATERIALS, ...wall.getCustomMaterials()],
+        onImportMaterials: (records) => wall.importCustomMaterials(records),
+        initialUnits: units,
+        onUnitsChange: (next) => shareUnits(next, 'building'),
+        store,
         topbarExtra: modeSwitch(),
       });
     }
@@ -76,12 +137,14 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
   }
 
   setMode(mode);
+  if (options.showWelcome ?? readKey(store, STORAGE_KEYS.welcomeSeen) !== '1') welcome.open();
 
   return {
     getMode: () => mode,
     setMode,
     wall,
     building: () => building,
+    openWelcome: () => welcome.open(),
     destroy(): void {
       wall.destroy();
       building?.destroy();

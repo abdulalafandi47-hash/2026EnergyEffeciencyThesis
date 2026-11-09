@@ -59,6 +59,8 @@ async function axeScan(page, label) {
 (async () => {
   const browser = await chromium.launch({ args: ARGS });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  // The first-visit welcome is checked in browser-building.cjs; here it is marked as seen.
+  await context.addInitScript(() => { try { localStorage.setItem('building-thermal-simulator.welcome-seen', '1'); } catch {} });
   const page = await context.newPage();
   const errors = [];
   const responses = [];
@@ -71,7 +73,7 @@ async function axeScan(page, label) {
   await page.goto(URL);
   await page.waitForSelector('canvas.viewer-canvas');
   const loadMs = Date.now() - t0;
-  check('app loads from a sub-folder address (as on GitHub Pages)', (await page.textContent('h1')) === 'Wall Thermal Simulator');
+  check('app loads from a sub-folder address (as on GitHub Pages)', (await page.textContent('h1')) === 'Building Thermal Simulator');
   check('every file it asks for is found (no 404)', responses.every((r) => r.status < 400), responses.filter((r) => r.status >= 400).map((r) => r.url).join(', '));
   const origin = new globalThis.URL(URL).origin;
   check('nothing is fetched from other sites', responses.every((r) => r.url.startsWith(origin) || r.url.startsWith('data:') || r.url.startsWith('blob:')), responses.filter((r) => !r.url.startsWith(origin)).map((r) => r.url).join(', '));
@@ -117,7 +119,12 @@ async function axeScan(page, label) {
 
   await page.reload();
   await page.waitForSelector('canvas.viewer-canvas');
-  check('after reloading the page, the custom material is gone (it lives only in the tab)', (await page.$('#f-layer-layer-3-material option[value="custom-datasheet-board"]')) === null);
+  check('after reloading the page, the last wall and its custom material are restored from this browser', (await page.inputValue('#f-layer-layer-3-material')) === 'custom-datasheet-board');
+  // Without browser storage (cleared, as in another browser) the custom material is gone; the saved file brings it back.
+  await page.evaluate(() => { localStorage.clear(); localStorage.setItem('building-thermal-simulator.welcome-seen', '1'); });
+  await page.reload();
+  await page.waitForSelector('canvas.viewer-canvas');
+  check('with browser storage cleared, the custom material is gone', (await page.$('#f-layer-layer-3-material option[value="custom-datasheet-board"]')) === null);
   await page.setInputFiles('[data-role="open-wall-input"]', saved.file);
   await page.waitForFunction(() => document.querySelector('[data-role="file-message"]').textContent.startsWith('Opened'));
   check('opening the saved wall brings the custom material back', (await page.inputValue('#f-layer-layer-3-material')) === 'custom-datasheet-board');

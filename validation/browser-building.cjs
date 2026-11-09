@@ -63,10 +63,23 @@ async function axeScan(page, label) {
   page.on('console', (m) => ['error', 'warning'].includes(m.type()) && errors.push(m.type() + ': ' + m.text()));
   page.on('pageerror', (e) => errors.push('pageerror: ' + e));
 
-  // ---- switch ----------------------------------------------------------------------------------
+  // ---- first-visit welcome --------------------------------------------------------------------
   await page.goto(URL);
   await page.waitForSelector('[data-workspace="wall"] .viewer-canvas');
-  check('opens on the single-wall calculator', (await page.textContent('[data-workspace="wall"] h1')) === 'Wall Thermal Simulator');
+  check('first visit: the welcome dialog is shown', await page.isVisible('[data-role="welcome"] [role="dialog"]'));
+  check('welcome: keyboard focus starts on "Load the example house"', await page.evaluate(() => document.activeElement?.getAttribute('data-role') === 'welcome-example'));
+  await page.click('[data-role="welcome-limits-toggle"]');
+  check('welcome: the limitations can be read', await page.isVisible('#welcome-limits'));
+  const vw = await axeScan(page, 'welcome dialog');
+  if (vw) check('axe: no violations with the welcome dialog open', vw.length === 0, `${vw.length} rule(s)`);
+  await page.click('[data-role="welcome-wall"]');
+  check('welcome closes and opens the single-wall calculator', !(await page.isVisible('[data-role="welcome"] [role="dialog"]')));
+  await page.reload();
+  await page.waitForSelector('[data-workspace="wall"] .viewer-canvas');
+  check('the welcome is not shown again on the next visit', !(await page.isVisible('[data-role="welcome"] [role="dialog"]')));
+
+  // ---- switch ----------------------------------------------------------------------------------
+  check('opens on the single-wall calculator', (await page.textContent('[data-workspace="wall"] h1')) === 'Building Thermal Simulator');
   await page.click('[data-workspace="wall"] [data-mode="building"]');
   await page.waitForSelector('[data-workspace="building"] .viewer-canvas');
   check('switch opens the building workspace', await page.isVisible('[data-workspace="building"] h1'));
@@ -93,6 +106,7 @@ async function axeScan(page, label) {
   check('results table lists all 14 elements', rows === 14, `${rows} rows`);
 
   // ---- picking in 3D ---------------------------------------------------------------------------
+  await page.click(B + '[data-role="view-menu-button"]');
   await page.click(B + 'button[aria-label="South elevation"]');
   await page.waitForTimeout(300);
   const box = await page.locator(canvas).boundingBox();
@@ -106,6 +120,7 @@ async function axeScan(page, label) {
   // ---- views -----------------------------------------------------------------------------------
   const pics = {};
   for (const [label, file] of [['Plan view from above (north at the top)', 'plan'], ['North elevation', 'north'], ['3D view from the north-west', 'iso-nw'], ['3D view from the south-east', 'iso-se']]) {
+    await page.click(`${B}[data-role="view-menu-button"]`);
     await page.click(`${B}button[aria-label="${label}"]`);
     await page.waitForTimeout(300);
     pics[file] = await page.locator(canvas).screenshot();
@@ -139,6 +154,57 @@ async function axeScan(page, label) {
   const status = await page.textContent(B + '[data-role="envelope-table"] tr[data-component="c8"] .status');
   check('window with a documented U-value and source becomes calculated', status === 'Calculated', status);
   check('typing was not interrupted', (await page.inputValue(B + '#b-u-source')) === 'Manufacturer datasheet (browser check)' && (await page.inputValue(B + '#b-u-value')) === '1.8');
+
+  // ---- sidebar fits: nothing sticks out (wide tables scroll inside their own region) --------------
+  const overflowing = [];
+  for (const id of ['c3', 'c5', 'c8', 'c14', 'c7']) {
+    await page.click(`${B}[data-role="envelope-table"] tr[data-component="${id}"] button`);
+    await page.waitForTimeout(100);
+    overflowing.push(...(await page.evaluate(() => {
+      const sb = document.querySelector('#b-sidebar');
+      const right = sb.getBoundingClientRect().right - 8;
+      const inScroller = (e) => e.closest('.table-wrap') !== null && !e.classList.contains('table-wrap');
+      return [...sb.querySelectorAll('*')].filter((e) => { const c = e.getBoundingClientRect(); return c.width > 0 && c.right > right + 1 && !inScroller(e); }).map((e) => `${e.tagName}.${e.className}`);
+    })));
+  }
+  check('sidebar editor fits its column for walls, roof, window, door and partition', overflowing.length === 0, overflowing.slice(0, 3).join(', '));
+
+  // ---- "?" explanation and the missing-data checklist ------------------------------------------
+  await page.click(`${B}[data-bkpi="net"] .help-tip`);
+  const pop = await page.evaluate(() => { const p = document.querySelector('[data-role="help-pop"]'); const r = p.getBoundingClientRect(); return { shown: !p.hidden, inside: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, text: p.textContent }; });
+  check('"?" opens an explanation inside the window', pop.shown && pop.inside && /Heat flow Q̇/.test(pop.text), JSON.stringify({ inside: pop.inside }));
+  await page.keyboard.press('Escape');
+  check('Escape closes the explanation', await page.evaluate(() => document.querySelector('[data-role="help-pop"]').hidden));
+  await page.click(`${B}.b-todo-item[data-component="c10"]`);
+  await page.waitForTimeout(150);
+  const fixed = await page.evaluate(() => { const a = document.activeElement; const r = a.getBoundingClientRect(); const sb = document.querySelector('#b-sidebar').getBoundingClientRect(); return { id: a.id, visible: r.top >= sb.top && r.bottom <= sb.bottom }; });
+  check('missing-data checklist: a click puts the cursor in the U-value field, scrolled into view', fixed.id === 'b-u-value' && fixed.visible, JSON.stringify(fixed));
+  await page.screenshot({ path: `${OUT}/building-checklist.png` });
+
+  // ---- results panel: drag the handle; the 3D view gives way; the height is remembered -------------
+  const rh = await page.locator(`${B}[data-role="results-resizer"]`).boundingBox();
+  const resultsBefore = (await page.locator(`${B}#b-results`).boundingBox()).height;
+  const stageBefore = (await page.locator(`${B}.viewer-stage`).boundingBox()).height;
+  await page.mouse.move(rh.x + rh.width / 2, rh.y + 3);
+  await page.mouse.down();
+  await page.mouse.move(rh.x + rh.width / 2, rh.y - 180, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const resultsAfter = (await page.locator(`${B}#b-results`).boundingBox()).height;
+  const stageAfter = (await page.locator(`${B}.viewer-stage`).boundingBox()).height;
+  check('dragging the handle makes the results taller and the 3D view shorter', resultsAfter > resultsBefore + 150 && stageAfter < stageBefore - 150, `${Math.round(resultsBefore)}→${Math.round(resultsAfter)} px`);
+
+  // ---- the project survives a reload ------------------------------------------------------------
+  const nameBefore = await page.inputValue(`${B}#b-project-name`);
+  const countBefore = await page.locator(`${B}[data-role="envelope-table"] tbody tr`).count();
+  await page.reload();
+  await page.waitForSelector(`${B}.viewer-canvas`);
+  check('the results height is remembered after a reload', Math.abs((await page.locator(`${B}#b-results`).boundingBox()).height - resultsAfter) < 2);
+  await page.focus(`${B}[data-role="results-resizer"]`);
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(200);
+  check('Home on the handle restores the default height', Math.abs((await page.locator(`${B}#b-results`).boundingBox()).height - resultsBefore) < 2);
+  check('after a reload the building project is restored', (await page.inputValue(`${B}#b-project-name`)) === nameBefore && (await page.locator(`${B}[data-role="envelope-table"] tbody tr`).count()) === countBefore);
 
   // ---- accessibility ---------------------------------------------------------------------------
   const v = await axeScan(page, 'building workspace');

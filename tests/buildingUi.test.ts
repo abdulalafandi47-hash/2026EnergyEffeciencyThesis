@@ -13,6 +13,7 @@ import { mountBuildingWorkspace } from '../src/ui/buildingWorkspace';
 import type { BuildingWorkspaceHandle } from '../src/ui/buildingWorkspace';
 import { fluxView } from '../src/ui/houseSpec';
 import { mountShell } from '../src/ui/shell';
+import { memoryStore } from '../src/ui/storage';
 import type { ShellHandle } from '../src/ui/shell';
 import type { HouseViewer, HouseViewerFactory, HouseViewerHandlers, HouseViewPreset } from '../src/viewer3d';
 import { expectClose } from './helpers/helpers';
@@ -61,7 +62,7 @@ async function mount(): Promise<void> {
   fake = makeFakeHouse();
   confirms = [];
   answer = true;
-  ws = mountBuildingWorkspace(root, { houseViewerFactory: fake.factory, confirm: (m) => (confirms.push(m), answer) });
+  ws = mountBuildingWorkspace(root, { houseViewerFactory: fake.factory, confirm: (m) => (confirms.push(m), answer), store: memoryStore() });
   await ws.ready;
 }
 afterEach(() => ws?.destroy());
@@ -91,7 +92,8 @@ describe('building workspace: start options', () => {
     expect(role('b-list').textContent).toContain('No components yet');
     expect(role('b-example-note').hidden).toBe(true);
     expect(q('.viewer-notice').textContent).toContain('Blank project');
-    expect(q('[data-bkpi="net"] .kpi-number').textContent).toBe('—');
+    // Nothing calculated: every total says "not available", none claims a calculated zero.
+    for (const key of ['net', 'gains', 'losses', 'energy', 'mass']) expect(q(`[data-bkpi="${key}"] .kpi-number`).textContent).toBe('—');
   });
 
   it('the example house is clearly labelled illustrative and draws every element', async () => {
@@ -257,6 +259,23 @@ describe('building workspace: editor details', () => {
     const c = ws.getProject().components.find((x) => x.id === id);
     return c && 'construction' in c ? c.construction.layers.map((l) => l.materialId) : [];
   };
+
+  it('each layer shows its full material name and data status; choosing a material updates it', async () => {
+    await mount();
+    loadExample();
+    ws.select('c1');
+    const names = [...root.querySelectorAll('.b-layer .b-layer-name')].map((n) => n.textContent);
+    expect(names[0]).toBe(BUILT_IN_MATERIALS.find((m) => m.id === 'gypsum-plaster')?.name);
+    expect(root.querySelector('.b-layer .badge')?.textContent?.toLowerCase()).toBe('illustrative');
+    // The thickness field and the buttons are in the same card as the material.
+    const card = root.querySelector('.b-layer') as HTMLElement;
+    expect(card.querySelector('#b-layer-0-t')).not.toBeNull();
+    expect(card.querySelector('[data-focus-id="layer-0-remove"]')).not.toBeNull();
+    chooseValue(select('layer-0-mat'), 'cement-plaster');
+    expect(root.querySelector('.b-layer .b-layer-name')?.textContent).toBe(BUILT_IN_MATERIALS.find((m) => m.id === 'cement-plaster')?.name);
+    click(role('b-layer-add'));
+    expect([...root.querySelectorAll('.b-layer .b-layer-name')].at(-1)?.textContent).toBe('No material chosen');
+  });
 
   it('layers can be moved and removed; the U-value follows', async () => {
     await mount();
@@ -450,7 +469,7 @@ describe('workspace switch', () => {
     root = document.createElement('div');
     document.body.append(root);
     const house = makeFakeHouse();
-    shell = mountShell(root, { viewerFactory: makeFake().factory, houseViewerFactory: house.factory, confirm: () => true });
+    shell = mountShell(root, { viewerFactory: makeFake().factory, houseViewerFactory: house.factory, confirm: () => true, store: memoryStore() });
     await shell.wall.ready;
     return house;
   }

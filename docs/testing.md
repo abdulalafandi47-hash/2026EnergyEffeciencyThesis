@@ -27,6 +27,18 @@ How the application is tested, how to repeat every check, what each kind of test
 
 Every element type is compared with a hand calculation in `tests/envelope.test.ts` (wall, roof with heat flowing up and down, floor over outdoor air, element next to an unconditioned space, window, layered door, and an envelope total with gains and losses mixed).
 
+### Phase 2: stabilisation and usability (2026-11-09)
+
+| Check | Result |
+|---|---|
+| Automated tests (`npm test`) | **1158 tests in 40 files, all pass** (new files: `projectFile`, `persistenceUi`, `buildingReport`, `guidanceUi`, `layoutUi`, `historyUi`, `unitsUi`) |
+| Strict type check, production build | no errors; builds |
+| Code coverage | 95.1 % of statements, 87.5 % of branches over all of `src/` (`src/envelope`: 95.9 % / 92.1 %; `src/ui`: 92.5 % / 82.5 %) |
+| Deliberate-bug checks | envelope script: **27 of 27 detected**; Stage 8 script (re-pointed at code that moved in Phase 2): **32 of 32 detected** |
+| Real-browser checks (Chromium, 4 scripts) | **all pass**: `browser-workspace.cjs` (incl. the 3D view at 70.0 % of the workspace and the data-status chip visible), `browser-reports.cjs`, `browser-building.cjs` (incl. the welcome, the sidebar fitting its column, the "?" explanation, the missing-data checklist, the results resize handle, restore after reload, two axe-core scans with 0 violations), `browser-e2e.cjs` (incl. the last wall restored after a reload) |
+
+Problems found by these checks and fixed before the merge: the building layer editor pushed the thickness field out of view; the data-status chip from PR #3 was invisible inside the clipped headline; the selected-element facts overflowed the sidebar; a focusable separator lacked its value (axe); a remembered results height was capped because the building workspace is created hidden; the wall top bar wrapped to two lines after the Undo/Redo buttons were added, so the 3D view fell to 69.7 % (now one line, 70.0 %).
+
 These numbers describe this commit on this machine. Run the checks again after any change.
 
 ## How to repeat the checks
@@ -40,6 +52,7 @@ npm run test:coverage     # tests plus a coverage table (coverage/index.html)
 python3 validation/reference_cases.py   # regenerate the independent reference values
 python3 validation/mutation_check.py    # deliberate-bug check of the Stage 8 code (a few minutes)
 python3 validation/mutation_check_envelope.py   # deliberate-bug check of the building-envelope code
+# (both scripts change source files while they run: do not edit or commit until they finish)
 ```
 
 The real-browser scripts need Playwright and a Chromium browser, which are not project dependencies (each script's header has the exact commands):

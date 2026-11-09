@@ -31,7 +31,7 @@ The compact results strip shows the six result tiles (U, R_total, Q̇ with its d
 
 ## 3D controls
 
-Toolbar: **Orbit** / **Pan** (what a left-drag does), **−** / **+** zoom, **Reset**; camera views **3D**, **Interior**, **Exterior**, **Section**, **Top** (plan from above, interior on the left); switches **Thermal overlay**, **Heat flow** (arrows), **Exploded**, **Labels**, **Grid**, **Axes**; **Thickness** drawing scale (1×, 2×, 5×, 10×; starts at 5×, always disclosed). Also: wheel/pinch zoom, right-drag pan, arrow keys / `+` / `−` / `Home` with the picture focused. The ground grid uses round metric spacing (shown in the status bar) so sizes can be judged.
+Toolbar: **Orbit** / **Pan** (what a left-drag does), **−** / **+** zoom, **Reset**; the **View** menu with the camera views **3D**, **Interior**, **Exterior**, **Section**, **Top** (plan from above, interior on the left); switches **Thermal overlay**, **Heat flow** (arrows), **Exploded**, **Labels**, **Grid**, **Axes**; **Thickness** drawing scale (1×, 2×, 5×, 10×; starts at 5×, always disclosed). Also: wheel/pinch zoom, right-drag pan, arrow keys / `+` / `−` / `Home` with the picture focused. The ground grid uses round metric spacing (shown in the status bar) so sizes can be judged.
 
 **Coordinate axes** (on by default) start at the bottom corner of the interior face: **x** (red) runs through the wall from the interior towards the exterior, **y** (green) up, **z** (blue) along the wall. They are a display aid drawn on top of the wall. When the thickness is drawn enlarged, distances along x in the picture are enlarged too; the status bar says so.
 
@@ -93,3 +93,14 @@ The calculation engine itself was **not changed**. `tests/architecture.test.ts` 
 1. Is a **single-wall** analysis sufficient for the thesis scope, or is a multi-wall building envelope expected (a larger model change)?
 2. Is the **temperature overlay** an acceptable way to present the steady-state profile, and should it start on (as now) or off?
 3. Which **comparisons** matter for the thesis (insulation thickness, material, climate conditions) so they can be made reproducible and exported in Stage 7?
+
+## Shared with the building workspace
+
+- **Top bar**: the *Single wall | Building envelope* switch, **Help** (the welcome page with the main limitations), and **Undo / Redo** (also Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y outside text fields; typing in one field counts as one step).
+- **Sidebar**: each section folds from its heading.
+- **Results panel**: drag its top edge, or use the arrow keys on that handle, to make it taller (Home restores the compact default, which keeps the 3D view at about 70 % of the workspace). The height is remembered in this browser.
+- **Units**: the temperature unit and the layers' thickness unit are shared with the building workspace; changing either here or there changes both (typed numbers are converted, so the wall stays the same).
+- **Keeping work**: the last wall (with its custom materials) is kept in this browser and comes back on the next visit (limitation A3). *Save wall* keeps it as a file.
+- **?** next to U, R_total, Q̇, q, R_si and R_se explains each quantity.
+- On a phone, the 3D view takes about half the screen so the results start on screen, and **☰ Inputs** scrolls down to the inputs.
+

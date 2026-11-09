@@ -8,17 +8,19 @@ web
 
 ## Users
 
-Primary: thesis examiners (the supervisor and examiners of a Civil and Environmental Engineering thesis) who open the public preview, or run the app locally, to judge the work. They need to see quickly what the model calculates, how far its results can be trusted, and where its limits are.
+Intended users (stated by the project owner): civil and environmental engineers, architects and building designers, and engineering students.
 
-Secondary (not confirmed as separate audiences): the thesis author, who builds walls and takes numbers into the report.
+The first readers are the thesis examiners (supervisor and examiners of a Civil and Environmental Engineering thesis), who open the public preview or run the app locally. They need to see quickly what the model calculates, how far its results can be trusted, and where its limits are. The thesis author builds walls and houses and takes the numbers into the thesis.
 
 ## Product Purpose
 
-A browser application where a user builds a multilayer wall from materials and dimensions and gets its steady-state thermal properties: layer and total resistance, U-value, heat-transfer rate with direction, energy over a stated duration, heat capacity and the temperature at every interface. It shows the wall in interactive 3D with a temperature overlay and heat-flow arrows, compares alternatives one change at a time, and writes a calculation report. Success is a thesis whose results and limits can be checked by someone else.
+Research objective: investigate how insulation, thermal mass, solar gains and building-envelope characteristics influence residential cooling demand in Cyprus.
+
+Today the application calculates steady-state thermal performance: a single multilayer wall (layer and total resistance, U-value, heat-transfer rate with direction, energy over a stated duration, heat capacity, interface temperatures; 3D view with temperature overlay; comparisons; calculation reports) and a simplified single-zone building envelope (each wall, roof, floor, window and door calculated with its own temperature difference and surface resistances). Hourly Cyprus weather, solar gains, transient heat transfer, thermal-mass time lag and cooling demand are planned future stages. Success is a thesis whose results and limits can be checked by someone else.
 
 ## Positioning
 
-Honest about its data. Every value carries a status (verified, unverified, illustrative or user-defined), results built on weak data say so on screen and on the first page of every report, and the reports never claim compliance. The model is deliberately narrow (one wall, one-dimensional, steady state) and says what it leaves out.
+Honest about its data. Every value carries a status (verified, unverified, illustrative or user-defined), results built on weak data say so on screen and on the first page of every report, and the reports never claim compliance. The model is deliberately narrow (one-dimensional, steady state, one element at a time) and says what it leaves out.
 
 ## Operating Context
 
@@ -29,7 +31,7 @@ Honest about its data. Every value carries a status (verified, unverified, illus
 
 ## Capabilities and Constraints
 
-- Scope: one multilayer wall, homogeneous layers, steady state, constant air temperatures. No thermal bridges, air cavities, windows, solar gains, ventilation, moisture or dynamic effects. The energy figure is not an annual energy demand.
+- Scope: homogeneous layers, steady state, constant air temperatures, each element on its own. Windows and doors only from documented U-values; ground-contact floors not calculated; no thermal bridges, air cavities, solar gains, ventilation, moisture or dynamic effects. The energy figure is not an annual energy demand.
 - All 9 built-in materials are illustrative (no source). Surface-resistance presets are unverified against ISO 6946. Custom materials are labelled user-defined.
 - Not validated against measurements or certified software; the tests prove the code matches its documented equations.
 - Interface language is English. Numbers accept a decimal comma or dot; the value in metres is shown beside each thickness.
@@ -38,7 +40,7 @@ Honest about its data. Every value carries a status (verified, unverified, illus
 
 ## Brand Commitments
 
-Product name in the page title: "Wall Thermal Simulator". The README title is "Building Thermal Performance & Energy Efficiency Simulator". The existing layout is a dark, 3D-first workspace (compact inputs sidebar, dominant 3D view, results panel at the bottom); the user asked that it be kept. No logo or other brand assets exist.
+Product name: "Building Thermal Simulator" (page title, top bar, reports, README). The existing layout is a dark, 3D-first workspace (compact inputs sidebar, dominant 3D view, results panel at the bottom); the user asked that it be kept. No logo or other brand assets exist.
 
 ## Evidence on Hand
 

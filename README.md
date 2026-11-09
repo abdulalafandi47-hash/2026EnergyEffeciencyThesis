@@ -1,6 +1,6 @@
-# Building Thermal Performance & Energy Efficiency Simulator
+# Building Thermal Simulator
 
-Thesis project (Civil and Environmental Engineering): a browser application that lets a user build a multilayer wall from materials and dimensions, calculates its steady-state thermal properties, shows it in interactive 3D, compares alternatives and writes a calculation report.
+Thesis project (Civil and Environmental Engineering). The research objective is to investigate how insulation, thermal mass, solar gains and building-envelope characteristics influence residential cooling demand in Cyprus. The application is a 3D-first browser tool with two linked workspaces: a **single-wall calculator** (build a multilayer wall, get its steady-state thermal properties, compare alternatives, write a calculation report) and a **building envelope** workspace (walls, partitions, roof, floor, windows and doors of a simplified house, each calculated in steady state). Dynamic simulation with Cyprus weather, solar gains and cooling demand are future stages, not implemented yet.
 
 ## Current status: all 8 stages done (Stage 8: whole-application testing and limitations)
 
@@ -18,6 +18,13 @@ Thesis project (Civil and Environmental Engineering): a browser application that
 ## New: building envelope workspace
 
 A **Building envelope** button in the top bar (or `…/#building`) opens a second workspace for a simplified single-storey, single-zone house: exterior walls with windows, glazed doors and doors cut into them, interior partitions, a flat roof and a floor. Start from a blank project or an **illustrative example house** (not a real or verified building). Each element is calculated on its own in steady state, with its own temperature difference and surface resistances (roofs and floors depend on the heat-flow direction); the envelope total is Σ Uᵢ·Aᵢ·ΔTᵢ over the elements that could be calculated. Windows and doors need a **documented U-value with a source**; nothing is assumed. Ground floors are listed as **unsupported** (EN ISO 13370 not implemented), solar gains are **not** calculated, and partitions between conditioned rooms are not counted. The 3D view shows the whole house: click an element to select and edit it, choose architectural views (plan, elevations, four 3D views), colour by element type or by calculated heat flux, hide elements without losing their data. See `docs/building-envelope.md`.
+
+Working with it:
+
+- **Projects**: save several projects in this browser, or download a project file (with its documented values and custom materials) and open it later or elsewhere. The last wall and the last house come back on the next visit.
+- **Report**: a building report (HTML, Markdown, JSON, CSV, print/PDF) with every component, every result, the documented sources, what is not included and why, equations, assumptions and limitations.
+- **Guidance**: a welcome page on the first visit (Help reopens it), "?" explanations of U, R, Q̇, q, R_si and R_se, and a missing-data checklist that takes you to the field to fill in.
+- **Editing**: undo and redo, units (°C, K, °F; mm, cm, m) shared by both workspaces, folding sidebar sections, a View menu for the camera, and a results panel you can drag taller.
 
 ## The single-wall calculator
 

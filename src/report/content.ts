@@ -107,3 +107,31 @@ export const REFERENCES: ReferenceRegister = {
     { title: 'Brunel University study on Cypriot building simulation', url: 'https://bura.brunel.ac.uk/handle/2438/7881', status: 'Lead only. Not read. Supports no value in this program.' },
   ],
 };
+
+/**
+ * Equations of the building-envelope calculation, as written in docs/building-envelope.md
+ * (section "Equations"); tests/buildingReport.test.ts checks that they stay the same.
+ */
+export const BUILDING_EQUATIONS: readonly EquationEntry[] = [
+  { n: 1, expression: 'R = d / λ', meaning: 'Resistance of one homogeneous layer of thickness d and conductivity λ.' },
+  { n: 2, expression: 'R_total = R_si + Σ(d_i / λ_i) + R_se', meaning: 'Resistances in series of a layered element, with the surface resistances for its heat-flow direction and exposure.' },
+  { n: 3, expression: 'U = 1 / R_total', meaning: 'Thermal transmittance of a layered element. Windows and documented doors use their documented overall U-value instead.' },
+  { n: 4, expression: 'A_wall = L_side × H − Σ A_openings', meaning: 'Net area of an exterior wall: its whole side minus its windows and doors. Openings: width × height; roof and floor: length × depth.' },
+  { n: 5, expression: 'ΔT_i = T_inside − T_other,i', meaning: 'Temperature difference of each element, with the temperature on ITS other side (outdoor air or an unconditioned space).' },
+  { n: 6, expression: 'Q̇_i = U_i · A_i · ΔT_i', meaning: 'Heat flow through one element; positive = heat leaving the conditioned zone, negative = heat entering it.' },
+  { n: 7, expression: 'Q̇_net = Σ Q̇_i (calculated elements only)', meaning: 'Net conductive heat flow of the envelope. Elements that are not calculated are listed, never estimated.' },
+  { n: 8, expression: 'E = Q̇_net · t / 1000', meaning: 'Energy in t hours at constant conditions, in kWh. Not an annual demand.' },
+  { n: 9, expression: 'C = Σ ρ_i · c_p,i · A · d_i', meaning: 'Heat capacity of the layered elements (thermal-mass indicator, a simple sum).' },
+];
+
+/** Statements about the scope of a building report. They appear in every building report. */
+export const BUILDING_LIMITATIONS: readonly string[] = [
+  'Steady state: each element is calculated on its own for one constant condition. This is not an hourly, dynamic or annual simulation, not a heating or cooling load and not a cooling-demand prediction.',
+  'The building is a simplified single-storey, single-zone box with a flat roof; each exterior wall spans its whole side (corners are counted in both walls).',
+  'Conduction only: solar gains through glazing and solar radiation on opaque surfaces, ventilation and air infiltration are not calculated. Window g-values and shading factors are recorded but not used.',
+  'Thermal bridges and junctions (wall–roof, wall–floor, corners, window reveals, lintels) are not included, so real heat transfer is normally higher.',
+  'Ground-contact floors are not calculated (the EN ISO 13370 method is not implemented); they are listed as unsupported and left out of the totals.',
+  'Window and door U-values are as documented by the user, with the stated source; this program has not checked them.',
+  'Surface-resistance presets are the commonly quoted ISO 6946 values and have not been checked against the standard. No result is a compliance check against any standard or Cypriot regulation.',
+  'Automated tests show that the code reproduces hand calculations of the stated equations; they are not a validation against measurements.',
+];

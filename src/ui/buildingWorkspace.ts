@@ -23,6 +23,8 @@ import {
   freeSides,
   isGlazing,
   isOpening,
+  parseProject,
+  serializeProject,
   setVisible,
   sideLength,
   updateComponent,
@@ -32,12 +34,25 @@ import { parseNumberInput } from '../editor';
 import { BUILT_IN_MATERIALS, MATERIAL_CATEGORIES, THERMAL_VALUE_TYPES } from '../materials';
 import type { MaterialRecord, ThermalValueType } from '../materials';
 import type { HouseViewerFactory } from '../viewer3d';
+import { buildBuildingReport, buildingReportFileBase, renderBuildingJson, renderElementsCsv, renderHtml, renderMarkdown } from '../report';
 import { createBuildingResultsPanel, flowWords, STATUS_LABEL } from './buildingResults';
+import type { BuildingReportFormat } from './buildingResults';
 import { h, show, tableRegion } from './dom';
 import type { Child } from './dom';
+import { helpTip } from './glossary';
+import type { GlossaryTerm } from './glossary';
 import { houseSpecFromProject, fluxView } from './houseSpec';
+import { History, isTextEntry, undoShortcut } from './history';
+import { DEFAULT_UNITS, DIFFERENCE_SYMBOL, readTemperature, readThickness, showDifference, showTemperature, showThickness, TEMPERATURE_SYMBOL } from './units';
+import type { LengthUnit, TemperatureUnit, UnitChoice } from './units';
+import { addResultsResizer, makeCollapsible } from './layoutControls';
+import type { Collapsible } from './layoutControls';
 import { createHouseViewerPanel } from './houseViewerPanel';
 import type { HouseViewerPanel } from './houseViewerPanel';
+import { browserIo } from './io';
+import type { FileIo } from './io';
+import { browserStore, ProjectLibrary, readKey, removeKey, STORAGE_KEYS, writeKey } from './storage';
+import type { KeyValueStore, LibraryEntry } from './storage';
 
 export interface BuildingWorkspaceOptions {
   houseViewerFactory?: HouseViewerFactory;
@@ -47,7 +62,20 @@ export interface BuildingWorkspaceOptions {
   confirm?: (message: string) => boolean;
   /** Extra control for the top bar (the mode switch). */
   topbarExtra?: HTMLElement;
+  /** Downloads and the clock; the browser version by default (tests pass their own). */
+  io?: FileIo;
+  /** Browser storage for the project library and the last project; the browser's by default, null for none. */
+  store?: KeyValueStore | null;
+  /** Receives custom materials that arrive with an opened or restored project (they join the session's materials). */
+  onImportMaterials?: (records: readonly MaterialRecord[]) => void;
+  /** Units to show and type in (shared with the wall calculator); °C and mm by default. */
+  initialUnits?: UnitChoice;
+  /** Called when the user chooses other units here. */
+  onUnitsChange?: (units: UnitChoice) => void;
 }
+
+/** Result of opening a project file. */
+export type OpenProjectOutcome = { ok: true; warnings: string[] } | { ok: false; error: string };
 
 export interface BuildingWorkspaceHandle {
   getProject(): BuildingProject;
@@ -55,6 +83,20 @@ export interface BuildingWorkspaceHandle {
   getResult(): EnvelopeResult;
   getSelected(): string | null;
   select(id: string | null): void;
+  /** Shows and reads values in these units (the model stays in °C and metres). */
+  setUnits(units: UnitChoice): void;
+  getUnits(): UnitChoice;
+  /** Takes back / repeats the last change of the project (false when there is nothing to undo or redo). */
+  undo(): boolean;
+  redo(): boolean;
+  /** Replaces the project with the text of a project file (asks first if there are unsaved changes). */
+  openProjectText(text: string, filename?: string): OpenProjectOutcome;
+  /** Saves the project in this browser's project library; false if the browser refused. */
+  saveToLibrary(asCopy?: boolean): boolean;
+  /** Loads the example house / starts a blank project (asks first if unsaved work would be lost). */
+  loadExample(): void;
+  newBlank(): void;
+  library: ProjectLibrary;
   viewer: HouseViewerPanel;
   ready: Promise<void>;
   destroy(): void;
@@ -79,7 +121,25 @@ const STATUS_TEXT: Record<string, string> = { verified: 'verified', unverified: 
 export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorkspaceOptions = {}): BuildingWorkspaceHandle {
   const materials = (): readonly MaterialRecord[] => options.getMaterials?.() ?? BUILT_IN_MATERIALS;
   const confirmAction = options.confirm ?? ((message: string) => window.confirm(message));
+  const io = options.io ?? browserIo;
+  const store = options.store === undefined ? browserStore() : options.store;
+  const library = new ProjectLibrary(store);
   let project: BuildingProject = createBlankProject();
+  let units: UnitChoice = options.initialUnits ?? DEFAULT_UNITS;
+  const tUnit = (): string => TEMPERATURE_SYMBOL[units.temperature];
+  /** The library entry this project was last saved to or opened from (null: not in the library). */
+  let libraryId: string | null = null;
+  /** The project's file text when it was last saved, opened or loaded; null for a project never saved. */
+  let savedText: string | null = null;
+  /** Where the current project came from, for the status line. */
+  let origin = '';
+  // ---- undo / redo ----
+  const history = new History<BuildingProject>();
+  /** The project as last drawn; a different one in refresh() means a change to record. */
+  let lastSeen: BuildingProject | null = null;
+  let applyingHistory = false;
+  /** Time of the last typed character (an 'input' event), to merge typing into one undo step. */
+  let lastTypedAt = Number.NEGATIVE_INFINITY;
   let result: EnvelopeResult = calculateEnvelope(project, materials());
   let selected: string | null = null;
   let editorKey = '';
@@ -119,7 +179,20 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   }
   const positive = (n: number): string | null => (n > 0 ? null : 'It must be greater than zero.');
   const nonNegative = (n: number): string | null => (n >= 0 ? null : 'It cannot be negative.');
-  const temperature = (n: number): string | null => (n >= -273.15 ? null : 'It cannot be below absolute zero (−273.15 °C).');
+  /** Rule for a temperature typed in the current unit. */
+  const temperature = (n: number): string | null => (readTemperature(n, units.temperature) >= -273.15 ? null : `It cannot be below absolute zero (${show(showTemperature(-273.15, units.temperature), 5)} ${tUnit()}).`);
+  /** A temperature field in the chosen unit; the model receives °C. */
+  const temperatureField = (focusId: string, label: string, celsius: number | null, onValid: (c: number | null) => void, allowEmpty = false): HTMLElement =>
+    numberField(focusId, label, tUnit(), celsius === null ? null : showTemperature(celsius, units.temperature), (n) => onValid(n === null ? null : readTemperature(n, units.temperature)), temperature, allowEmpty);
+  const unitSelect = <T extends string>(focusId: string, label: string, choices: Array<[T, string]>, value: T, onChange: (v: T) => void): HTMLElement => selectField(focusId, label, choices, value, onChange);
+  function setUnits(next: UnitChoice, tell = true): void {
+    if (next.temperature === units.temperature && next.thickness === units.thickness) return;
+    units = next;
+    renderProjectInputs();
+    keepingFocus(renderEditor);
+    refresh();
+    if (tell) options.onUnitsChange?.(units);
+  }
 
   function textField(focusId: string, label: string, value: string, onInput: (text: string) => void, max = 200): HTMLElement {
     const id = `b-${focusId}`;
@@ -151,6 +224,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
 
   function select(id: string | null): void {
     selected = id !== null && project.components.some((c) => c.id === id) ? id : null;
+    if (selected) folds.editor.setOpen(true);
     viewerPanel.select(selected);
     renderEditor();
     refresh();
@@ -159,24 +233,138 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   }
 
   // ---- static sections ----------------------------------------------------------------------------
-  const projectName = h('p', { class: 'b-project-name', 'data-role': 'b-project-name' });
+  const projectNameHost = h('div', { class: 'b-project-name' });
   const exampleNote = h('p', { class: 'callout', role: 'note', 'data-role': 'b-example-note', hidden: true }, EXAMPLE_NOTE);
+  const saveStatus = h('p', { class: 'note', 'data-role': 'b-save-status', role: 'status' });
+  const fileMsg = h('p', { class: 'file-message', 'data-role': 'b-file-message', role: 'status' });
+  const libraryList = h('ul', { class: 'b-library', 'data-role': 'b-library', 'aria-label': 'Projects saved in this browser' });
   const btn = (text: string, role: string, onClick: () => void, cls = ''): HTMLButtonElement => {
     const b = h('button', { type: 'button', 'data-role': role, 'data-focus-id': role, class: cls }, text);
     b.addEventListener('click', onClick);
     return b;
   };
+  const textOf = (p: BuildingProject): string => serializeProject(p, materials());
+  /** Changes since the last save or open (a blank, never-saved project has nothing to lose). */
+  const isDirty = (): boolean => (savedText === null ? project.components.length > 0 : textOf(project) !== savedText);
+  /** Asks before throwing away unsaved work; true = go ahead. */
+  const okToReplace = (what: string): boolean =>
+    !isDirty() || confirmAction(`${what} replaces the current project (${project.components.length} components)${savedText === null ? ', which is not saved' : ' and its unsaved changes'}. Save it or download it first if you want to keep it. Continue?`);
+  const showFileMessage = (text: string, kind: 'ok' | 'warn' | 'bad'): void => {
+    fileMsg.textContent = text;
+    fileMsg.className = `file-message ${kind}`;
+  };
   const replaceProject = (next: BuildingProject, what: string): void => {
-    if (project.components.length > 0 && !confirmAction(`${what} replaces the current project (${project.components.length} components). Continue?`)) return;
+    if (!okToReplace(what)) return;
+    libraryId = null;
+    savedText = null;
+    origin = '';
     setProject(next);
+    showFileMessage('', 'ok');
     announce(`${what}: done.`);
   };
+
+  function saveToLibrary(asCopy = false): boolean {
+    if (!library.available) {
+      showFileMessage('This browser does not allow saving here (private window or blocked site data). Use "Download project file" to keep the project.', 'bad');
+      return false;
+    }
+    const text = textOf(project);
+    const entry = library.save(asCopy ? null : libraryId, project.name, text, io.now());
+    if (!entry) {
+      showFileMessage('The browser refused to save (its storage may be full). Download the project file to keep it.', 'bad');
+      return false;
+    }
+    libraryId = entry.id;
+    savedText = text;
+    origin = '';
+    writeKey(store, STORAGE_KEYS.lastBuildingLibraryId, entry.id);
+    showFileMessage(`Saved "${entry.name}" in this browser${asCopy ? ' as a new copy' : ''}.`, 'ok');
+    announce(`Project saved in this browser.`);
+    renderProjectStatus();
+    return true;
+  }
+
+  function openProjectText(text: string, filename = 'the file', fromLibrary: LibraryEntry | null = null): OpenProjectOutcome {
+    const parsed = parseProject(text, BUILT_IN_MATERIALS);
+    if (!parsed.ok) {
+      showFileMessage(`Could not open ${filename}: ${parsed.error} The current project was not changed.`, 'bad');
+      announce(`Could not open ${filename}. The current project was not changed.`);
+      return parsed;
+    }
+    if (!okToReplace(`Opening ${filename}`)) return { ok: false, error: 'Cancelled: the current project was kept.' };
+    options.onImportMaterials?.(parsed.customMaterials);
+    libraryId = fromLibrary?.id ?? null;
+    if (libraryId) writeKey(store, STORAGE_KEYS.lastBuildingLibraryId, libraryId);
+    setProject(parsed.project);
+    savedText = textOf(project);
+    origin = fromLibrary ? '' : `Opened from ${filename}; not saved in this browser yet.`;
+    renderProjectStatus();
+    const extra = parsed.customMaterials.length > 0 ? ` (with ${parsed.customMaterials.length} custom material${parsed.customMaterials.length === 1 ? '' : 's'})` : '';
+    showFileMessage(`Opened ${filename}${extra}${parsed.warnings.length > 0 ? ` with ${parsed.warnings.length} warning${parsed.warnings.length === 1 ? '' : 's'}: ${parsed.warnings.join(' ')}` : '.'}`, parsed.warnings.length > 0 ? 'warn' : 'ok');
+    announce(`Opened ${filename}.`);
+    return { ok: true, warnings: parsed.warnings };
+  }
+
+  const fileInput = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'data-role': 'b-open-input', 'aria-label': 'Building project file to open' });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = '';
+    if (!file) return;
+    void file.text().then((text) => openProjectText(text, file.name), () => showFileMessage(`Could not read ${file.name}.`, 'bad'));
+  });
+  const fileName = (): string => `${(project.name.trim() || 'building').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'building'}.building.json`;
+
+  function renderProjectStatus(): void {
+    const entry = libraryId ? library.list().find((e) => e.id === libraryId) : undefined;
+    const when = (iso: string): string => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    saveStatus.textContent = !library.available
+      ? 'Saving in this browser is not available here; download the project file to keep it.'
+      : entry
+        ? `${isDirty() ? 'Unsaved changes. ' : ''}Last saved in this browser ${when(entry.savedAt)}.`
+        : origin || (project.components.length === 0 ? 'Not saved yet.' : 'Not saved in this browser yet.');
+    const entries = library.list();
+    libraryList.replaceChildren(
+      ...(entries.length === 0
+        ? [h('li', { class: 'empty' }, library.available ? 'No saved projects yet. "Save" keeps the current one here.' : 'Not available in this browser.')]
+        : entries.map((e) => {
+            const open = h('button', { type: 'button', class: 'tool', 'aria-label': `Open saved project ${e.name}`, 'data-focus-id': `lib-open-${e.id}` }, 'Open');
+            open.addEventListener('click', () => {
+              const text = library.load(e.id);
+              if (text === null) return showFileMessage(`The saved project "${e.name}" could not be read from this browser.`, 'bad');
+              openProjectText(text, `"${e.name}"`, e);
+            });
+            const del = h('button', { type: 'button', class: 'tool danger', 'aria-label': `Delete saved project ${e.name}`, 'data-focus-id': `lib-del-${e.id}` }, 'Delete…');
+            del.addEventListener('click', () => {
+              if (!confirmAction(`Delete the saved project "${e.name}" from this browser? This cannot be undone (a downloaded file is not affected).`)) return;
+              library.remove(e.id);
+              if (libraryId === e.id) libraryId = null;
+              announce(`Saved project ${e.name} deleted.`);
+              renderProjectStatus();
+            });
+            return h('li', { class: `b-library-row${e.id === libraryId ? ' current' : ''}`, 'data-library-id': e.id }, h('span', { class: 'b-library-name' }, e.name, h('span', { class: 'b-type' }, when(e.savedAt))), h('span', { class: 'layer-buttons' }, open, del));
+          })),
+    );
+  }
+
   const projectSection = h(
     'section',
     { 'aria-labelledby': 'b-h-project' },
     h('h2', { id: 'b-h-project' }, '1. Project'),
-    projectName,
+    projectNameHost,
     exampleNote,
+    saveStatus,
+    h('div', { class: 'actions' },
+      btn('Save', 'b-save', () => void saveToLibrary(false), 'primary'),
+      btn('Save as copy', 'b-save-copy', () => void saveToLibrary(true)),
+      btn('Download project file', 'b-download', () => {
+        io.download(fileName(), 'application/json', textOf(project) + '\n');
+        announce('Project file downloaded.');
+      }),
+      btn('Open project file…', 'b-open', () => fileInput.click()),
+      fileInput,
+    ),
+    fileMsg,
+    h('details', { class: 'b-library-box', 'data-role': 'b-library-box' }, h('summary', {}, 'Projects saved in this browser'), libraryList, h('p', { class: 'note' }, 'Kept in this browser on this computer only. Download a project file to keep it safely or share it.')),
     h('div', { class: 'actions' },
       btn('New blank project', 'b-new', () => replaceProject(createBlankProject(), 'A new blank project')),
       btn('Load example house', 'b-example', () => replaceProject(createExampleHouse(materials()), 'Loading the example house')),
@@ -204,11 +392,16 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     conditionsHost.replaceChildren(
       textField('c-label', 'Name of this condition', c.label, (t) => setC({ label: t })),
       h('div', { class: 'grid' },
-        numberField('c-inside', 'Inside air', '°C', c.insideC, (n) => setC({ insideC: n as number }), temperature),
-        numberField('c-outside', 'Outdoor air', '°C', c.outsideC, (n) => setC({ outsideC: n as number }), temperature),
+        temperatureField('c-inside', 'Inside air', c.insideC, (n) => setC({ insideC: n as number })),
+        temperatureField('c-outside', 'Outdoor air', c.outsideC, (n) => setC({ outsideC: n as number })),
         numberField('c-duration', 'Duration', 'h', c.durationH, (n) => setC({ durationH: n as number }), nonNegative),
       ),
       h('p', { class: 'note' }, 'One constant condition for every element (steady state). These are values you choose, not Cyprus design data; no hourly weather is used in this stage.'),
+      h('div', { class: 'grid b-units' },
+        unitSelect<TemperatureUnit>('unit-temperature', 'Temperature unit', [['C', '°C'], ['K', 'K'], ['F', '°F']], units.temperature, (t) => setUnits({ ...units, temperature: t })),
+        unitSelect<LengthUnit>('unit-thickness', 'Layer thickness unit', [['mm', 'mm'], ['cm', 'cm'], ['m', 'm']], units.thickness, (t) => setUnits({ ...units, thickness: t })),
+      ),
+      h('p', { class: 'note' }, 'Shared with the single-wall calculator. Calculations always use SI units (°C, m); only what you see and type changes. Reports use SI units.'),
     );
   }
 
@@ -233,15 +426,81 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     select(id);
     announce(`${COMPONENT_TYPE_LABEL[type]} added. Enter its properties in the editor.`);
   }, 'primary');
+  const todo = h('div', { class: 'b-todo', 'data-role': 'b-todo' });
   const componentsSection = h(
     'section',
     { 'aria-labelledby': 'b-h-components' },
     h('h2', { id: 'b-h-components' }, '4. Components'),
+    todo,
     list,
     h('div', { class: 'b-add-row' }, addType, addButton),
     addMsg,
     h('p', { class: 'note' }, 'Untick to hide an element in the 3D view; it is still calculated. Windows and doors are added to the selected wall (or the first wall).'),
   );
+
+  /**
+   * Where to type to fix a component that is not calculated: the data-focus-id of the field, or null
+   * when nothing can be entered (unsupported or deliberately not counted).
+   */
+  function fixTarget(c: Component, r: ComponentResult): { componentId: string; focusId: string } | null {
+    if (r.status !== 'missing-data' && r.status !== 'invalid') return null;
+    const here = (focusId: string): { componentId: string; focusId: string } => ({ componentId: c.id, focusId });
+    const layers = (construction: Construction): { componentId: string; focusId: string } => {
+      if (construction.layers.length === 0) return here('layer-add');
+      const i = construction.layers.findIndex((l) => l.materialId === null || !materials().some((m) => m.id === l.materialId));
+      if (i >= 0) return here(`layer-${i}-mat`);
+      const t = construction.layers.findIndex((l) => l.thicknessM === null || !(l.thicknessM > 0));
+      return here(t >= 0 ? `layer-${t}-t` : 'layer-add');
+    };
+    if ('exposure' in c && c.exposure.kind === 'unconditioned' && c.exposure.temperatureC === null) return here('exposure-t');
+    if (isGlazing(c) || (c.type === 'door' && c.spec.kind === 'u-value')) {
+      const u = isGlazing(c) ? c.uValue : c.type === 'door' && c.spec.kind === 'u-value' ? c.spec.uValue : null;
+      if (u === null) return here('u-value');
+      if (u.source.trim() === '') return here('u-source');
+      // With a valid U-value, a missing temperature of the host wall's space is fixed on the host wall.
+      const host = project.components.find((w) => w.id === c.hostId);
+      if (r.status === 'missing-data' && host && 'exposure' in host && host.exposure.kind === 'unconditioned' && host.exposure.temperatureC === null) return { componentId: host.id, focusId: 'exposure-t' };
+      if (r.status === 'invalid' && r.reasons.some((x) => /U-value/.test(x))) return here('u-value');
+      if (r.status === 'invalid' && r.reasons.some((x) => /g-value/.test(x))) return here('g-value');
+      if (r.status === 'invalid' && r.reasons.some((x) => /Shading/.test(x))) return here('fc-value');
+      return here('width');
+    }
+    if ('construction' in c) return layers(c.construction);
+    if (c.type === 'door' && c.spec.kind === 'layers') return layers(c.spec.construction);
+    return here('name');
+  }
+
+  /** Selects the component and puts the cursor in the field that needs data. */
+  function goFix(target: { componentId: string; focusId: string }): void {
+    folds.editor.setOpen(true);
+    select(target.componentId);
+    const field = root.querySelector<HTMLElement>(`[data-focus-id="${CSS.escape(target.focusId)}"]`);
+    field?.scrollIntoView({ block: 'center' });
+    field?.focus();
+  }
+
+  function renderTodo(): void {
+    const items = result.components.flatMap((r) => {
+      const c = project.components.find((x) => x.id === r.componentId);
+      const target = c ? fixTarget(c, r) : null;
+      return c && target ? [{ c, r, target }] : [];
+    });
+    const cannot = result.components.filter((r) => r.status === 'unsupported');
+    todo.hidden = project.components.length === 0;
+    keepingFocus(() => todo.replaceChildren(...([
+      items.length === 0
+        ? h('p', { class: 'b-todo-done' }, '✓ No data missing.')
+        : h('details', { class: 'b-todo-box', open: true },
+            h('summary', {}, `Missing data: ${items.length} element${items.length === 1 ? '' : 's'} not calculated`),
+            h('ul', { 'data-role': 'b-todo-list' }, ...items.map(({ c, r, target }) => {
+              const b = h('button', { type: 'button', class: 'b-todo-item', 'data-focus-id': `todo-${c.id}`, 'data-component': c.id }, h('strong', {}, c.name), h('span', {}, r.reasons[0] ?? 'Enter the missing data.'));
+              b.addEventListener('click', () => goFix(target));
+              return h('li', {}, b);
+            })),
+          ),
+      cannot.length > 0 ? h('p', { class: 'note' }, `Cannot be calculated in this stage: ${cannot.map((r) => r.name).join(', ')} (see Not included).`) : null,
+    ].filter(Boolean) as Node[])));
+  }
 
   function renderList(): void {
     keepingFocus(() => {
@@ -283,10 +542,10 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
         if (latest && 'exposure' in latest) commitComponent({ ...latest, exposure } as Component, true);
       }),
       c.exposure.kind === 'unconditioned'
-        ? numberField('exposure-t', 'Temperature of that space', '°C', c.exposure.temperatureC, (n) => {
+        ? temperatureField('exposure-t', 'Temperature of that space', c.exposure.temperatureC, (n) => {
             const latest = current();
             if (latest && 'exposure' in latest) commitComponent({ ...latest, exposure: { kind: 'unconditioned', temperatureC: n } } as Component);
-          }, temperature, true)
+          }, true)
         : null,
     ];
   }
@@ -306,7 +565,9 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
         const latest = get() ?? { layers: [] };
         set({ layers: latest.layers.map((l, k) => (k === i ? { ...l, ...patch } : l)) }, structural);
       };
-      sel.addEventListener('change', () => update({ materialId: sel.value === '' ? null : sel.value }));
+      // Structural: the layer's name line above the list shows the chosen material.
+      sel.addEventListener('change', () => update({ materialId: sel.value === '' ? null : sel.value }, true));
+      const material = layer.materialId ? mats.find((m) => m.id === layer.materialId) : undefined;
       const move = (to: number): void => {
         const latest = get() ?? { layers: [] };
         const layers = [...latest.layers];
@@ -321,13 +582,20 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
         b.addEventListener('click', onClick);
         return b;
       };
+      // Two lines that fit the narrow sidebar: the full material name (wrapping) with its data status,
+      // then the controls. A long name never pushes the thickness field or buttons out of view.
       return h(
         'li',
         { class: 'b-layer' },
-        h('span', { class: 'pos' }, `${i + 1}`),
+        h('div', { class: 'b-layer-head' },
+          h('span', { class: 'pos' }, `${i + 1}`),
+          h('span', { class: 'b-layer-name' }, material ? material.name : layer.materialId ? `${layer.materialId} (not in the database)` : 'No material chosen'),
+          material ? h('span', { class: `badge badge-${material.status}` }, STATUS_TEXT[material.status] ?? material.status) : null,
+        ),
         sel,
-        numberField(`layer-${i}-t`, `Thickness of layer ${i + 1}`, 'mm', layer.thicknessM === null ? null : layer.thicknessM * 1000, (n) => update({ thicknessM: n === null ? null : n / 1000 }), positive, true),
-        h('span', { class: 'layer-buttons' },
+        h('div', { class: 'b-layer-row' },
+          numberField(`layer-${i}-t`, `Thickness of layer ${i + 1}`, units.thickness, layer.thicknessM === null ? null : showThickness(layer.thicknessM, units.thickness), (n) => update({ thicknessM: n === null ? null : readThickness(n, units.thickness) }), positive, true),
+          h('span', { class: 'layer-buttons' },
           small('↑', `Move layer ${i + 1} towards the inside`, `layer-${i}-up`, i === 0, () => move(i - 1)),
           small('↓', `Move layer ${i + 1} towards the outside`, `layer-${i}-down`, i === construction.layers.length - 1, () => move(i + 1)),
           small('✕', `Remove layer ${i + 1}`, `layer-${i}-remove`, false, () => {
@@ -335,6 +603,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
             set({ layers: latest.layers.filter((_, k) => k !== i) }, true);
             root.querySelector<HTMLElement>('[data-focus-id="layer-add"]')?.focus();
           }),
+          ),
         ),
       );
     });
@@ -354,7 +623,7 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   }
 
   /** Editor for a traceable value: number, source, value type, conditions. */
-  function documentedEditor(prefix: string, label: string, unit: string, get: () => DocumentedValue | null, set: (v: DocumentedValue | null) => void, check: (n: number) => string | null): HTMLElement {
+  function documentedEditor(prefix: string, label: string, unit: string, get: () => DocumentedValue | null, set: (v: DocumentedValue | null) => void, check: (n: number) => string | null, required = true): HTMLElement {
     const v = get();
     const blank = (value: number): DocumentedValue => ({ value, unit, source: '', valueType: 'unspecified', status: 'user-defined' });
     return h('fieldset', { class: 'doc-field' },
@@ -368,7 +637,11 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
       v ? textField(`${prefix}-source`, 'Source (datasheet, test report, standard table …) — required', v.source, (t) => { const latest = get(); if (latest) set({ ...latest, source: t }); }, 300) : null,
       v ? selectField(`${prefix}-type`, 'Value type', THERMAL_VALUE_TYPES.map((t) => [t, t] as [ThermalValueType, string]), v.valueType, (t) => { const latest = get(); if (latest) set({ ...latest, valueType: t }); }) : null,
       v ? textField(`${prefix}-conditions`, 'Test or reference conditions (optional)', v.conditions ?? '', (t) => { const latest = get(); if (latest) set({ ...latest, conditions: t }); }, 300) : null,
-      h('p', { class: 'note' }, v ? 'Typed values are recorded as user-defined; this program does not check them.' : 'Not entered. Nothing is assumed: the element is reported as missing data until you enter a documented value.'),
+      h('p', { class: 'note' }, v
+        ? 'Typed values are recorded as user-defined; this program does not check them.'
+        : required
+          ? 'Not entered. Nothing is assumed: the element is reported as missing data until you enter a documented value.'
+          : 'Optional. Recorded with its source for the next stage; not used in this stage\'s calculation.'),
     );
   }
 
@@ -410,8 +683,8 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
         const g = (): typeof c => latest<typeof c>();
         parts.push(
           documentedEditor('u', 'Overall U-value U_w', 'W/(m²·K)', () => g()?.uValue ?? null, (v) => commitComponent({ ...g(), uValue: v }), positive),
-          documentedEditor('g', 'Solar energy transmittance g (stored only)', '–', () => g()?.gValue ?? null, (v) => commitComponent({ ...g(), gValue: v }), (n) => (n >= 0 && n <= 1 ? null : 'It must be between 0 and 1.')),
-          documentedEditor('fc', 'Shading reduction factor (stored only)', '–', () => g()?.shadingFactor ?? null, (v) => commitComponent({ ...g(), shadingFactor: v }), (n) => (n >= 0 && n <= 1 ? null : 'It must be between 0 and 1.')),
+          documentedEditor('g', 'Solar energy transmittance g (stored only)', '–', () => g()?.gValue ?? null, (v) => commitComponent({ ...g(), gValue: v }), (n) => (n >= 0 && n <= 1 ? null : 'It must be between 0 and 1.'), false),
+          documentedEditor('fc', 'Shading reduction factor (stored only)', '–', () => g()?.shadingFactor ?? null, (v) => commitComponent({ ...g(), shadingFactor: v }), (n) => (n >= 0 && n <= 1 ? null : 'It must be between 0 and 1.'), false),
           h('p', { class: 'note' }, 'Solar gains are NOT calculated in this stage (they need solar irradiance per orientation, from weather data). Only conduction U·A·ΔT is calculated.'),
         );
       } else if (c.type === 'door') {
@@ -473,14 +746,14 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   }
 
   function resultBlock(r: ComponentResult): Node[] {
-    const fact = (k: string, v: string): Node[] => [h('dt', {}, k), h('dd', {}, v)];
+    const fact = (k: string, v: string, term?: GlossaryTerm): Node[] => [h('dt', {}, k, term ? helpTip(term) : null), h('dd', {}, v)];
     const facts: Node[] = [];
-    if (r.uValueWPerM2K !== null) facts.push(...fact('U-value', `${show(r.uValueWPerM2K, 4)} W/(m²·K)`));
-    if (r.totalResistanceM2KPerW !== null) facts.push(...fact('R_total', `${show(r.totalResistanceM2KPerW, 4)} m²·K/W`));
+    if (r.uValueWPerM2K !== null) facts.push(...fact('U-value', `${show(r.uValueWPerM2K, 4)} W/(m²·K)`, 'u-value'));
+    if (r.totalResistanceM2KPerW !== null) facts.push(...fact('R_total', `${show(r.totalResistanceM2KPerW, 4)} m²·K/W`, 'r-value'));
     if (r.layersResistanceM2KPerW !== null) facts.push(...fact('Σ d/λ (layers only)', `${show(r.layersResistanceM2KPerW, 4)} m²·K/W`));
-    if (r.surface) facts.push(...fact('Surface resistances', `R_si ${show(r.surface.insideM2KPerW, 3)}, R_se ${show(r.surface.outsideM2KPerW, 3)} m²·K/W for ${r.surface.heatFlow} heat flow (${r.surface.status})`));
-    if (r.otherSideC !== null) facts.push(...fact('Other side', `${show(r.otherSideC, 4)} °C; ΔT = ${show(r.deltaTK ?? NaN, 4)} K`));
-    if (r.heatFlowW !== null) facts.push(...fact('Heat flow Q̇', flowWords(r.heatFlowW)));
+    if (r.surface) facts.push(...fact('Surface resistances R_si / R_se', `R_si ${show(r.surface.insideM2KPerW, 3)}, R_se ${show(r.surface.outsideM2KPerW, 3)} m²·K/W for ${r.surface.heatFlow} heat flow (${r.surface.status})`));
+    if (r.otherSideC !== null) facts.push(...fact('Other side', `${show(showTemperature(r.otherSideC, units.temperature), 4)} ${tUnit()}; ΔT = ${show(showDifference(r.deltaTK ?? Number.NaN, units.temperature), 4)} ${DIFFERENCE_SYMBOL[units.temperature]}`));
+    if (r.heatFlowW !== null) facts.push(...fact('Heat flow Q̇', flowWords(r.heatFlowW), 'heat-flow'));
     if (r.heatCapacity) facts.push(...fact('Heat capacity', `${show(r.heatCapacity.arealJPerM2K / 1000, 4)} kJ/(m²·K); ${show(r.heatCapacity.totalJPerK / 1e6, 4)} MJ/K (simple sum)`));
     const nodes: Node[] = [
       h('h3', {}, 'Result (steady state)'),
@@ -492,8 +765,8 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
       const t = r.engine.temperatureProfile;
       nodes.push(tableRegion('Layers of the selected element', h('table', { class: 'data-table compact', 'data-role': 'b-layer-table' },
         h('caption', {}, 'Layers, inside → outside'),
-        h('thead', {}, h('tr', {}, ...['Layer', 'd (mm)', 'λ', 'R (m²·K/W)', 'T in-side (°C)', 'T out-side (°C)', 'Data'].map((x) => h('th', { scope: 'col' }, x)))),
-        h('tbody', {}, ...r.engine.layers.map((l, i) => h('tr', {}, h('td', {}, l.name), h('td', { class: 'num' }, show(l.thicknessM * 1000, 4)), h('td', { class: 'num' }, show(l.lambdaWPerMK, 3)), h('td', { class: 'num' }, show(l.resistanceM2KPerW, 4)), h('td', { class: 'num' }, show(t[1 + i]?.temperatureC ?? NaN, 4)), h('td', { class: 'num' }, show(t[2 + i]?.temperatureC ?? NaN, 4)), h('td', {}, l.propertyStatus ?? '—')))),
+        h('thead', {}, h('tr', {}, ...['Layer', `d (${units.thickness})`, 'λ', 'R (m²·K/W)', `T in-side (${tUnit()})`, `T out-side (${tUnit()})`, 'Data'].map((x) => h('th', { scope: 'col' }, x)))),
+        h('tbody', {}, ...r.engine.layers.map((l, i) => h('tr', {}, h('td', {}, l.name), h('td', { class: 'num' }, show(showThickness(l.thicknessM, units.thickness), 4)), h('td', { class: 'num' }, show(l.lambdaWPerMK, 3)), h('td', { class: 'num' }, show(l.resistanceM2KPerW, 4)), h('td', { class: 'num' }, show(showTemperature(t[1 + i]?.temperatureC ?? Number.NaN, units.temperature), 4)), h('td', { class: 'num' }, show(showTemperature(t[2 + i]?.temperatureC ?? Number.NaN, units.temperature), 4)), h('td', {}, l.propertyStatus ?? '—')))),
       )));
     }
     if (r.documented.length > 0) {
@@ -508,15 +781,42 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
 
   // ---- workspace shell ---------------------------------------------------------------------------------
   const viewerPanel = createHouseViewerPanel({ ...(options.houseViewerFactory ? { viewerFactory: options.houseViewerFactory } : {}), onSelect: (id) => select(id), announce });
-  const resultsPanel = createBuildingResultsPanel({ onSelect: (id) => select(id) });
+  /** Builds the building report from the CURRENT project and its result (nothing is recalculated for it). */
+  function makeReport(format: BuildingReportFormat, title: string, notes: string): void {
+    const input = { title, notes, generatedAt: io.now(), project, result, typeLabels: COMPONENT_TYPE_LABEL };
+    const model = buildBuildingReport(input);
+    const base = buildingReportFileBase(model);
+    if (format === 'html') io.download(`${base}.html`, 'text/html', renderHtml(model));
+    else if (format === 'markdown') io.download(`${base}.md`, 'text/markdown', renderMarkdown(model));
+    else if (format === 'json') io.download(`${base}.json`, 'application/json', renderBuildingJson(model, input));
+    else if (format === 'csv') io.download(`${base}-elements.csv`, 'text/csv', renderElementsCsv(input));
+    else io.print(renderHtml(model));
+    announce(format === 'print' ? 'The print dialog shows the building report; choose "Save as PDF" to keep it as a file.' : 'Building report downloaded.');
+  }
+  const resultsPanel = createBuildingResultsPanel({
+    onSelect: (id) => select(id),
+    onFix: (id) => {
+      const c = project.components.find((x) => x.id === id);
+      const r = result.components.find((x) => x.componentId === id);
+      const target = c && r ? fixTarget(c, r) : null;
+      if (target) goFix(target);
+      else select(id);
+    },
+    onReport: makeReport,
+  });
   const sidebarToggle = h('button', { type: 'button', class: 'tool', 'aria-expanded': 'true', 'aria-controls': 'b-sidebar', 'data-role': 'b-sidebar-toggle' }, '☰ Inputs');
+  const undoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'b-undo', 'aria-label': 'Undo the last change (Ctrl+Z)', title: 'Undo (Ctrl+Z)', disabled: true }, '↶');
+  const redoButton = h('button', { type: 'button', class: 'tool', 'data-role': 'b-redo', 'aria-label': 'Redo (Ctrl+Shift+Z)', title: 'Redo (Ctrl+Shift+Z)', disabled: true }, '↷');
+  undoButton.addEventListener('click', () => void undo());
+  redoButton.addEventListener('click', () => void redo());
   const workspace = h(
     'div',
     { class: 'workspace building-workspace' },
     h('header', { class: 'topbar' },
       sidebarToggle,
-      h('h1', {}, 'Building Envelope'),
+      h('h1', {}, 'Building Thermal Simulator'),
       options.topbarExtra ?? null,
+      h('span', { class: 'history-tools' }, undoButton, redoButton),
       h('span', { class: 'mode-chip' }, 'Steady-state element calculations'),
       h('details', { class: 'policy' }, h('summary', {}, 'Scope: steady state, not an energy simulation'), h('p', {}, 'Each element is calculated on its own for one constant condition (Q̇ = U·A·ΔT). This is not an hourly, annual or cooling-demand simulation and not a compliance check. Built-in material values are illustrative; window and door values must come from documented sources.')),
     ),
@@ -527,21 +827,79 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     announcer,
   );
   sidebarToggle.addEventListener('click', () => {
+    // On a phone the inputs sit below the 3D view and the results: the button takes you there instead.
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 960px)').matches) {
+      workspace.querySelector('#b-sidebar')?.scrollIntoView({ block: 'start' });
+      return;
+    }
     const collapsed = workspace.classList.toggle('sidebar-collapsed');
     sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
   });
   root.replaceChildren(workspace);
+  workspace.addEventListener('input', () => void (lastTypedAt = Date.now()), true);
+  workspace.addEventListener('keydown', (e) => {
+    const action = undoShortcut(e);
+    if (!action || isTextEntry(e.target)) return;
+    e.preventDefault();
+    if (action === 'undo') undo();
+    else redo();
+  });
+  // Each sidebar section folds; selecting a component opens the sections that show it.
+  const folds: Record<'project' | 'geometry' | 'conditions' | 'components' | 'editor', Collapsible> = {
+    project: makeCollapsible(projectSection),
+    geometry: makeCollapsible(geometrySection),
+    conditions: makeCollapsible(conditionsSection),
+    components: makeCollapsible(componentsSection),
+    editor: makeCollapsible(editorSection),
+  };
+  addResultsResizer(resultsPanel.element, workspace.querySelector('.stage-column') as HTMLElement, 'building-thermal-simulator.results-height.building', store);
+
+  /** Shows `next` (from the history) everywhere, keeping the selection if the component still exists. */
+  function showFromHistory(next: BuildingProject, what: 'Undone' | 'Redone'): void {
+    applyingHistory = true;
+    project = next;
+    if (selected && !project.components.some((c) => c.id === selected)) selected = null;
+    renderProjectInputs();
+    keepingFocus(renderEditor);
+    refresh();
+    applyingHistory = false;
+    announce(`${what}.`);
+  }
+  function undo(): boolean {
+    const previous = history.undo(project);
+    if (!previous) return false;
+    showFromHistory(previous, 'Undone');
+    return true;
+  }
+  function redo(): boolean {
+    const next = history.redo(project);
+    if (!next) return false;
+    showFromHistory(next, 'Redone');
+    return true;
+  }
 
   function refresh(): void {
+    if (lastSeen && project !== lastSeen && !applyingHistory) history.record(lastSeen, Date.now() - lastTypedAt < 50);
+    lastSeen = project;
+    undoButton.disabled = !history.canUndo;
+    redoButton.disabled = !history.canRedo;
     result = calculateEnvelope(project, materials());
-    projectName.textContent = project.name;
+    if (!projectNameHost.contains(document.activeElement)) {
+      projectNameHost.replaceChildren(textField('project-name', 'Project name', project.name, (t) => commit({ ...project, name: t }), 120));
+    }
     exampleNote.hidden = !(project.isExample || project.name.startsWith('Example house'));
     renderList();
     viewerPanel.setModel(houseSpecFromProject(project), fluxView(result), project.components.length);
     viewerPanel.select(selected);
-    resultsPanel.setResult(project, result, selected);
+    resultsPanel.setResult(project, result, selected, units);
     if (editorKey !== (selected ?? '')) renderEditor();
     renderSelectedResults();
+    renderTodo();
+    // Keep the last project in this browser, so a reload or the next visit continues where you left off.
+    writeKey(store, STORAGE_KEYS.lastBuilding, textOf(project));
+    if (libraryId) writeKey(store, STORAGE_KEYS.lastBuildingLibraryId, libraryId);
+    else removeKey(store, STORAGE_KEYS.lastBuildingLibraryId);
+    renderProjectStatus();
   }
 
   function setProject(next: BuildingProject): void {
@@ -552,7 +910,26 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     refresh();
   }
 
-  setProject(project);
+  /** The last project kept in this browser, if any; damaged or foreign data is ignored, never fatal. */
+  function restoreLast(): boolean {
+    const text = readKey(store, STORAGE_KEYS.lastBuilding);
+    if (!text) return false;
+    const parsed = parseProject(text, BUILT_IN_MATERIALS);
+    if (!parsed.ok) return false;
+    options.onImportMaterials?.(parsed.customMaterials);
+    const id = readKey(store, STORAGE_KEYS.lastBuildingLibraryId);
+    const entryText = id ? library.load(id) : null;
+    libraryId = entryText !== null ? id : null;
+    setProject(parsed.project);
+    // Dirty relative to the saved copy in the library, if there is one.
+    savedText = entryText !== null ? (() => { const e = parseProject(entryText, BUILT_IN_MATERIALS); return e.ok ? textOf(e.project) : null; })() : null;
+    origin = libraryId ? '' : 'Restored from your last visit; not saved in this browser yet.';
+    renderProjectStatus();
+    if (parsed.project.components.length > 0) showFileMessage(`Restored "${parsed.project.name}" from your last visit.`, 'ok');
+    return true;
+  }
+
+  if (!restoreLast()) setProject(project);
 
   return {
     getProject: () => project,
@@ -560,6 +937,15 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     getResult: () => result,
     getSelected: () => selected,
     select,
+    setUnits: (u) => setUnits(u, false),
+    getUnits: () => units,
+    undo,
+    redo,
+    openProjectText: (text, filename) => openProjectText(text, filename),
+    saveToLibrary,
+    loadExample: () => replaceProject(createExampleHouse(materials()), 'Loading the example house'),
+    newBlank: () => replaceProject(createBlankProject(), 'A new blank project'),
+    library,
     viewer: viewerPanel,
     ready: viewerPanel.ready,
     destroy: () => viewerPanel.destroy(),

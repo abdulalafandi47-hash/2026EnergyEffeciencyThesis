@@ -7,6 +7,8 @@
  * physics. Everything is a steady-state result under constant conditions, never
  * a dynamic or whole-building simulation, and the panel says so.
  */
+import { helpTip } from './glossary';
+import type { GlossaryTerm } from './glossary';
 import { describeDirection, profileForChart, swapLayerMaterial, sweepLayerThickness, sweepOutsideTemperature } from '../analysis';
 import type { Analysis, Comparison, VariantResult } from '../analysis';
 import { buildBarChart, buildProfileChart } from '../charts';
@@ -188,9 +190,11 @@ export function createResultsPanel(options: {
   const stale = (): HTMLElement | null => (input.stale ? h('p', { class: 'stale-note' }, 'The editor has errors. These results belong to the last valid wall.') : null);
   const badge = (status: string): HTMLElement => h('span', { class: `badge badge-${status}` }, { verified: 'Verified', unverified: 'Unverified', illustrative: 'Illustrative', 'user-defined': 'User-defined' }[status] ?? status);
 
+  const TERM_OF_KPI: Partial<Record<string, GlossaryTerm>> = { 'u-value': 'u-value', 'r-total': 'r-value', 'heat-transfer': 'heat-flow', flux: 'heat-flux' };
   function kpi(key: string, label: string, value: string, unit: string, sub: Child, extra?: Child): HTMLElement {
     // The formula line is also the tile's tooltip, because the compact panel hides it until enlarged.
-    return h('div', { class: 'kpi', 'data-kpi': key, title: typeof sub === 'string' ? sub : undefined }, h('div', { class: 'kpi-label' }, label), h('div', { class: 'kpi-value' }, h('span', { class: 'kpi-number' }, value), ' ', h('span', { class: 'kpi-unit' }, unit)), extra ?? null, h('div', { class: 'kpi-sub' }, sub));
+    const term = TERM_OF_KPI[key];
+    return h('div', { class: 'kpi', 'data-kpi': key, title: typeof sub === 'string' ? sub : undefined }, h('div', { class: 'kpi-label' }, h('span', { class: 'kpi-label-text' }, label), term ? helpTip(term) : null), h('div', { class: 'kpi-value' }, h('span', { class: 'kpi-number' }, value), ' ', h('span', { class: 'kpi-unit' }, unit)), extra ?? null, h('div', { class: 'kpi-sub' }, sub));
   }
 
   // ---- results tab ------------------------------------------------------------------------------------------------
