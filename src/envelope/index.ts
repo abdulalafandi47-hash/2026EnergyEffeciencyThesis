@@ -6,3 +6,5 @@ export { checkModel, dimensionsOf, openingsOf, sideLength, sillOf } from './geom
 export type { ElementDimensions, ModelIssue } from './geometry';
 export { COMPONENT_TYPE_LABEL, isGlazing, isOpening } from './types';
 export type * from './types';
+export { MAX_COMPONENTS, MAX_PROJECT_FILE_CHARS, materialIdsOf, parseProject, PROJECT_FILE_SCHEMA, PROJECT_FILE_VERSION, serializeProject } from './persist';
+export type { ParseProjectResult, ProjectFile } from './persist';

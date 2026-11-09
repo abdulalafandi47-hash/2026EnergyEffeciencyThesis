@@ -13,6 +13,7 @@ import { mountBuildingWorkspace } from '../src/ui/buildingWorkspace';
 import type { BuildingWorkspaceHandle } from '../src/ui/buildingWorkspace';
 import { fluxView } from '../src/ui/houseSpec';
 import { mountShell } from '../src/ui/shell';
+import { memoryStore } from '../src/ui/storage';
 import type { ShellHandle } from '../src/ui/shell';
 import type { HouseViewer, HouseViewerFactory, HouseViewerHandlers, HouseViewPreset } from '../src/viewer3d';
 import { expectClose } from './helpers/helpers';
@@ -61,7 +62,7 @@ async function mount(): Promise<void> {
   fake = makeFakeHouse();
   confirms = [];
   answer = true;
-  ws = mountBuildingWorkspace(root, { houseViewerFactory: fake.factory, confirm: (m) => (confirms.push(m), answer) });
+  ws = mountBuildingWorkspace(root, { houseViewerFactory: fake.factory, confirm: (m) => (confirms.push(m), answer), store: memoryStore() });
   await ws.ready;
 }
 afterEach(() => ws?.destroy());
@@ -468,7 +469,7 @@ describe('workspace switch', () => {
     root = document.createElement('div');
     document.body.append(root);
     const house = makeFakeHouse();
-    shell = mountShell(root, { viewerFactory: makeFake().factory, houseViewerFactory: house.factory, confirm: () => true });
+    shell = mountShell(root, { viewerFactory: makeFake().factory, houseViewerFactory: house.factory, confirm: () => true, store: memoryStore() });
     await shell.wall.ready;
     return house;
   }

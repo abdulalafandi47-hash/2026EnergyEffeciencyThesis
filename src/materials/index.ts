@@ -10,6 +10,7 @@ export {
   searchMaterials,
 } from './database';
 export { exportMaterialsCsv, exportMaterialsJson } from './exportMaterials';
+export { copyMaterial, MAX_CUSTOM_MATERIALS, readCustomMaterials } from './fileMaterials';
 export { materialNotices, NOT_APPROVED_NOTICE } from './notices';
 export { materialToLayer } from './toLayer';
 export { MATERIAL_CATEGORIES, SI_MATERIAL_UNITS, SOURCE_TYPES, THERMAL_VALUE_TYPES } from './types';

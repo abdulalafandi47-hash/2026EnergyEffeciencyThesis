@@ -11,6 +11,8 @@ import type { WallEditorHandle } from './app';
 import { mountBuildingWorkspace } from './buildingWorkspace';
 import type { BuildingWorkspaceHandle } from './buildingWorkspace';
 import { h } from './dom';
+import { browserStore, readKey, STORAGE_KEYS, writeKey } from './storage';
+import type { KeyValueStore } from './storage';
 
 export type WorkspaceMode = 'wall' | 'building';
 
@@ -21,6 +23,8 @@ export interface ShellOptions {
   /** Called after every switch (the browser keeps the mode in the address, e.g. #building). */
   onModeChange?: (mode: WorkspaceMode) => void;
   confirm?: (message: string) => boolean;
+  /** Browser storage for the last wall, the last building and the project library; the browser's by default, null for none. */
+  store?: KeyValueStore | null;
 }
 
 export interface ShellHandle {
@@ -56,7 +60,19 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
   const buildingRoot = h('div', { 'data-workspace': 'building', hidden: true });
   root.replaceChildren(wallRoot, buildingRoot);
 
-  const wall = mountWallEditor(wallRoot, BUILT_IN_MATERIALS, { ...(options.viewerFactory ? { viewerFactory: options.viewerFactory } : {}), topbarExtra: modeSwitch() });
+  const store = options.store === undefined ? browserStore() : options.store;
+  let restoring = true;
+  const wall: WallEditorHandle = mountWallEditor(wallRoot, BUILT_IN_MATERIALS, {
+    ...(options.viewerFactory ? { viewerFactory: options.viewerFactory } : {}),
+    topbarExtra: modeSwitch(),
+    // Keep the last wall in this browser (not while the saved one is being read back).
+    onChange: () => {
+      if (!restoring) writeKey(store, STORAGE_KEYS.lastWall, wall.serialize());
+    },
+  });
+  const lastWall = readKey(store, STORAGE_KEYS.lastWall);
+  if (lastWall) wall.openWallText(lastWall, 'your last wall (restored from this browser)');
+  restoring = false;
   let building: BuildingWorkspaceHandle | null = null;
 
   function setMode(next: WorkspaceMode): void {
@@ -66,6 +82,8 @@ export function mountShell(root: HTMLElement, options: ShellOptions = {}): Shell
         ...(options.houseViewerFactory ? { houseViewerFactory: options.houseViewerFactory } : {}),
         ...(options.confirm ? { confirm: options.confirm } : {}),
         getMaterials: () => [...BUILT_IN_MATERIALS, ...wall.getCustomMaterials()],
+        onImportMaterials: (records) => wall.importCustomMaterials(records),
+        store,
         topbarExtra: modeSwitch(),
       });
     }

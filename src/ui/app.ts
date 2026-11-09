@@ -69,6 +69,8 @@ export interface WallEditorOptions {
   io?: FileIo;
   /** Extra element placed in the top bar (the workspace switch). */
   topbarExtra?: HTMLElement;
+  /** Called after every change of the wall or the custom materials (used to keep the last wall in the browser). */
+  onChange?: () => void;
 }
 
 /** Result of opening a saved wall. */
@@ -91,6 +93,13 @@ export interface WallEditorHandle {
   openWallText(text: string, filename?: string): OpenWallOutcome;
   /** Resolves once the 3D viewer has been created or found unavailable. */
   ready: Promise<void>;
+  /** The current wall as the text of a wall file (inputs as typed, with the custom materials). */
+  serialize(): string;
+  /**
+   * Adds custom materials that arrived in another file (a building project). A record with the same id
+   * replaces the session's; only records that passed the file checks may be passed in.
+   */
+  importCustomMaterials(records: readonly MaterialRecord[]): void;
   /** Releases the 3D viewer. */
   destroy(): void;
 }
@@ -112,6 +121,12 @@ const STATUS_TEXT: Record<string, string> = {
   unverified: 'Unverified',
   illustrative: 'Illustrative',
   'user-defined': 'User-defined',
+};
+
+/** `current` with `incoming` added; an incoming record replaces one with the same id. */
+const mergeCustom = (current: readonly MaterialRecord[], incoming: readonly MaterialRecord[]): MaterialRecord[] => {
+  const ids = new Set(incoming.map((m) => m.id));
+  return [...current.filter((m) => !ids.has(m.id)), ...incoming];
 };
 
 const fieldDomId = (field: string): string => `f-${field.replace(/[^a-zA-Z0-9]+/g, '-')}`;
@@ -390,8 +405,7 @@ export function mountWallEditor(
     }
     draft = parsed.draft;
     // The file's custom materials join the session's; a record with the same id is replaced by the file's.
-    const fromFile = new Set(parsed.customMaterials.map((m) => m.id));
-    customMaterials = [...customMaterials.filter((m) => !fromFile.has(m.id)), ...parsed.customMaterials];
+    customMaterials = mergeCustom(customMaterials, parsed.customMaterials);
     syncStaticInputs();
     renderLayers();
     refresh();
@@ -402,6 +416,13 @@ export function mountWallEditor(
     );
     announce(`Opened ${filename}.`);
     return { ok: true, warnings: parsed.warnings };
+  }
+
+  function importCustomMaterials(records: readonly MaterialRecord[]): void {
+    if (records.length === 0) return;
+    customMaterials = mergeCustom(customMaterials, records);
+    renderLayers();
+    refresh();
   }
 
   function addCustomMaterial(input: CustomMaterialInput): AddCustomOutcome {
@@ -688,6 +709,7 @@ export function mountWallEditor(
     );
     resultsPanel.setState(result.wall && analysis ? { wall: result.wall, views, analysis, draft, editorWarnings: result.warnings.map((w) => w.message) } : null, !result.ok);
     refreshSelectionUi();
+    options.onChange?.();
   }
 
   function renderSummary(views: LayerView[]): void {
@@ -777,6 +799,8 @@ export function mountWallEditor(
     openWallText,
     getCustomMaterials: () => customMaterials,
     addCustomMaterial,
+    serialize: () => serializeDraft(draft, allMaterials(), customMaterials),
+    importCustomMaterials,
     ready: viewerPanel.ready,
     destroy: () => viewerPanel.destroy(),
   };

@@ -23,6 +23,8 @@ import {
   freeSides,
   isGlazing,
   isOpening,
+  parseProject,
+  serializeProject,
   setVisible,
   sideLength,
   updateComponent,
@@ -38,6 +40,10 @@ import type { Child } from './dom';
 import { houseSpecFromProject, fluxView } from './houseSpec';
 import { createHouseViewerPanel } from './houseViewerPanel';
 import type { HouseViewerPanel } from './houseViewerPanel';
+import { browserIo } from './io';
+import type { FileIo } from './io';
+import { browserStore, ProjectLibrary, readKey, removeKey, STORAGE_KEYS, writeKey } from './storage';
+import type { KeyValueStore, LibraryEntry } from './storage';
 
 export interface BuildingWorkspaceOptions {
   houseViewerFactory?: HouseViewerFactory;
@@ -47,7 +53,16 @@ export interface BuildingWorkspaceOptions {
   confirm?: (message: string) => boolean;
   /** Extra control for the top bar (the mode switch). */
   topbarExtra?: HTMLElement;
+  /** Downloads and the clock; the browser version by default (tests pass their own). */
+  io?: FileIo;
+  /** Browser storage for the project library and the last project; the browser's by default, null for none. */
+  store?: KeyValueStore | null;
+  /** Receives custom materials that arrive with an opened or restored project (they join the session's materials). */
+  onImportMaterials?: (records: readonly MaterialRecord[]) => void;
 }
+
+/** Result of opening a project file. */
+export type OpenProjectOutcome = { ok: true; warnings: string[] } | { ok: false; error: string };
 
 export interface BuildingWorkspaceHandle {
   getProject(): BuildingProject;
@@ -55,6 +70,11 @@ export interface BuildingWorkspaceHandle {
   getResult(): EnvelopeResult;
   getSelected(): string | null;
   select(id: string | null): void;
+  /** Replaces the project with the text of a project file (asks first if there are unsaved changes). */
+  openProjectText(text: string, filename?: string): OpenProjectOutcome;
+  /** Saves the project in this browser's project library; false if the browser refused. */
+  saveToLibrary(asCopy?: boolean): boolean;
+  library: ProjectLibrary;
   viewer: HouseViewerPanel;
   ready: Promise<void>;
   destroy(): void;
@@ -79,7 +99,16 @@ const STATUS_TEXT: Record<string, string> = { verified: 'verified', unverified: 
 export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorkspaceOptions = {}): BuildingWorkspaceHandle {
   const materials = (): readonly MaterialRecord[] => options.getMaterials?.() ?? BUILT_IN_MATERIALS;
   const confirmAction = options.confirm ?? ((message: string) => window.confirm(message));
+  const io = options.io ?? browserIo;
+  const store = options.store === undefined ? browserStore() : options.store;
+  const library = new ProjectLibrary(store);
   let project: BuildingProject = createBlankProject();
+  /** The library entry this project was last saved to or opened from (null: not in the library). */
+  let libraryId: string | null = null;
+  /** The project's file text when it was last saved, opened or loaded; null for a project never saved. */
+  let savedText: string | null = null;
+  /** Where the current project came from, for the status line. */
+  let origin = '';
   let result: EnvelopeResult = calculateEnvelope(project, materials());
   let selected: string | null = null;
   let editorKey = '';
@@ -159,24 +188,138 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
   }
 
   // ---- static sections ----------------------------------------------------------------------------
-  const projectName = h('p', { class: 'b-project-name', 'data-role': 'b-project-name' });
+  const projectNameHost = h('div', { class: 'b-project-name' });
   const exampleNote = h('p', { class: 'callout', role: 'note', 'data-role': 'b-example-note', hidden: true }, EXAMPLE_NOTE);
+  const saveStatus = h('p', { class: 'note', 'data-role': 'b-save-status', role: 'status' });
+  const fileMsg = h('p', { class: 'file-message', 'data-role': 'b-file-message', role: 'status' });
+  const libraryList = h('ul', { class: 'b-library', 'data-role': 'b-library', 'aria-label': 'Projects saved in this browser' });
   const btn = (text: string, role: string, onClick: () => void, cls = ''): HTMLButtonElement => {
     const b = h('button', { type: 'button', 'data-role': role, 'data-focus-id': role, class: cls }, text);
     b.addEventListener('click', onClick);
     return b;
   };
+  const textOf = (p: BuildingProject): string => serializeProject(p, materials());
+  /** Changes since the last save or open (a blank, never-saved project has nothing to lose). */
+  const isDirty = (): boolean => (savedText === null ? project.components.length > 0 : textOf(project) !== savedText);
+  /** Asks before throwing away unsaved work; true = go ahead. */
+  const okToReplace = (what: string): boolean =>
+    !isDirty() || confirmAction(`${what} replaces the current project (${project.components.length} components)${savedText === null ? ', which is not saved' : ' and its unsaved changes'}. Save it or download it first if you want to keep it. Continue?`);
+  const showFileMessage = (text: string, kind: 'ok' | 'warn' | 'bad'): void => {
+    fileMsg.textContent = text;
+    fileMsg.className = `file-message ${kind}`;
+  };
   const replaceProject = (next: BuildingProject, what: string): void => {
-    if (project.components.length > 0 && !confirmAction(`${what} replaces the current project (${project.components.length} components). Continue?`)) return;
+    if (!okToReplace(what)) return;
+    libraryId = null;
+    savedText = null;
+    origin = '';
     setProject(next);
+    showFileMessage('', 'ok');
     announce(`${what}: done.`);
   };
+
+  function saveToLibrary(asCopy = false): boolean {
+    if (!library.available) {
+      showFileMessage('This browser does not allow saving here (private window or blocked site data). Use "Download project file" to keep the project.', 'bad');
+      return false;
+    }
+    const text = textOf(project);
+    const entry = library.save(asCopy ? null : libraryId, project.name, text, io.now());
+    if (!entry) {
+      showFileMessage('The browser refused to save (its storage may be full). Download the project file to keep it.', 'bad');
+      return false;
+    }
+    libraryId = entry.id;
+    savedText = text;
+    origin = '';
+    writeKey(store, STORAGE_KEYS.lastBuildingLibraryId, entry.id);
+    showFileMessage(`Saved "${entry.name}" in this browser${asCopy ? ' as a new copy' : ''}.`, 'ok');
+    announce(`Project saved in this browser.`);
+    renderProjectStatus();
+    return true;
+  }
+
+  function openProjectText(text: string, filename = 'the file', fromLibrary: LibraryEntry | null = null): OpenProjectOutcome {
+    const parsed = parseProject(text, BUILT_IN_MATERIALS);
+    if (!parsed.ok) {
+      showFileMessage(`Could not open ${filename}: ${parsed.error} The current project was not changed.`, 'bad');
+      announce(`Could not open ${filename}. The current project was not changed.`);
+      return parsed;
+    }
+    if (!okToReplace(`Opening ${filename}`)) return { ok: false, error: 'Cancelled: the current project was kept.' };
+    options.onImportMaterials?.(parsed.customMaterials);
+    libraryId = fromLibrary?.id ?? null;
+    if (libraryId) writeKey(store, STORAGE_KEYS.lastBuildingLibraryId, libraryId);
+    setProject(parsed.project);
+    savedText = textOf(project);
+    origin = fromLibrary ? '' : `Opened from ${filename}; not saved in this browser yet.`;
+    renderProjectStatus();
+    const extra = parsed.customMaterials.length > 0 ? ` (with ${parsed.customMaterials.length} custom material${parsed.customMaterials.length === 1 ? '' : 's'})` : '';
+    showFileMessage(`Opened ${filename}${extra}${parsed.warnings.length > 0 ? ` with ${parsed.warnings.length} warning${parsed.warnings.length === 1 ? '' : 's'}: ${parsed.warnings.join(' ')}` : '.'}`, parsed.warnings.length > 0 ? 'warn' : 'ok');
+    announce(`Opened ${filename}.`);
+    return { ok: true, warnings: parsed.warnings };
+  }
+
+  const fileInput = h('input', { type: 'file', accept: '.json,application/json', hidden: true, 'data-role': 'b-open-input', 'aria-label': 'Building project file to open' });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = '';
+    if (!file) return;
+    void file.text().then((text) => openProjectText(text, file.name), () => showFileMessage(`Could not read ${file.name}.`, 'bad'));
+  });
+  const fileName = (): string => `${(project.name.trim() || 'building').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'building'}.building.json`;
+
+  function renderProjectStatus(): void {
+    const entry = libraryId ? library.list().find((e) => e.id === libraryId) : undefined;
+    const when = (iso: string): string => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    saveStatus.textContent = !library.available
+      ? 'Saving in this browser is not available here; download the project file to keep it.'
+      : entry
+        ? `${isDirty() ? 'Unsaved changes. ' : ''}Last saved in this browser ${when(entry.savedAt)}.`
+        : origin || (project.components.length === 0 ? 'Not saved yet.' : 'Not saved in this browser yet.');
+    const entries = library.list();
+    libraryList.replaceChildren(
+      ...(entries.length === 0
+        ? [h('li', { class: 'empty' }, library.available ? 'No saved projects yet. "Save" keeps the current one here.' : 'Not available in this browser.')]
+        : entries.map((e) => {
+            const open = h('button', { type: 'button', class: 'tool', 'aria-label': `Open saved project ${e.name}`, 'data-focus-id': `lib-open-${e.id}` }, 'Open');
+            open.addEventListener('click', () => {
+              const text = library.load(e.id);
+              if (text === null) return showFileMessage(`The saved project "${e.name}" could not be read from this browser.`, 'bad');
+              openProjectText(text, `"${e.name}"`, e);
+            });
+            const del = h('button', { type: 'button', class: 'tool danger', 'aria-label': `Delete saved project ${e.name}`, 'data-focus-id': `lib-del-${e.id}` }, 'Delete…');
+            del.addEventListener('click', () => {
+              if (!confirmAction(`Delete the saved project "${e.name}" from this browser? This cannot be undone (a downloaded file is not affected).`)) return;
+              library.remove(e.id);
+              if (libraryId === e.id) libraryId = null;
+              announce(`Saved project ${e.name} deleted.`);
+              renderProjectStatus();
+            });
+            return h('li', { class: `b-library-row${e.id === libraryId ? ' current' : ''}`, 'data-library-id': e.id }, h('span', { class: 'b-library-name' }, e.name, h('span', { class: 'b-type' }, when(e.savedAt))), h('span', { class: 'layer-buttons' }, open, del));
+          })),
+    );
+  }
+
   const projectSection = h(
     'section',
     { 'aria-labelledby': 'b-h-project' },
     h('h2', { id: 'b-h-project' }, '1. Project'),
-    projectName,
+    projectNameHost,
     exampleNote,
+    saveStatus,
+    h('div', { class: 'actions' },
+      btn('Save', 'b-save', () => void saveToLibrary(false), 'primary'),
+      btn('Save as copy', 'b-save-copy', () => void saveToLibrary(true)),
+      btn('Download project file', 'b-download', () => {
+        io.download(fileName(), 'application/json', textOf(project) + '\n');
+        announce('Project file downloaded.');
+      }),
+      btn('Open project file…', 'b-open', () => fileInput.click()),
+      fileInput,
+    ),
+    fileMsg,
+    h('details', { class: 'b-library-box', 'data-role': 'b-library-box' }, h('summary', {}, 'Projects saved in this browser'), libraryList, h('p', { class: 'note' }, 'Kept in this browser on this computer only. Download a project file to keep it safely or share it.')),
     h('div', { class: 'actions' },
       btn('New blank project', 'b-new', () => replaceProject(createBlankProject(), 'A new blank project')),
       btn('Load example house', 'b-example', () => replaceProject(createExampleHouse(materials()), 'Loading the example house')),
@@ -544,7 +687,9 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
 
   function refresh(): void {
     result = calculateEnvelope(project, materials());
-    projectName.textContent = project.name;
+    if (!projectNameHost.contains(document.activeElement)) {
+      projectNameHost.replaceChildren(textField('project-name', 'Project name', project.name, (t) => commit({ ...project, name: t }), 120));
+    }
     exampleNote.hidden = !(project.isExample || project.name.startsWith('Example house'));
     renderList();
     viewerPanel.setModel(houseSpecFromProject(project), fluxView(result), project.components.length);
@@ -552,6 +697,11 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     resultsPanel.setResult(project, result, selected);
     if (editorKey !== (selected ?? '')) renderEditor();
     renderSelectedResults();
+    // Keep the last project in this browser, so a reload or the next visit continues where you left off.
+    writeKey(store, STORAGE_KEYS.lastBuilding, textOf(project));
+    if (libraryId) writeKey(store, STORAGE_KEYS.lastBuildingLibraryId, libraryId);
+    else removeKey(store, STORAGE_KEYS.lastBuildingLibraryId);
+    renderProjectStatus();
   }
 
   function setProject(next: BuildingProject): void {
@@ -562,7 +712,26 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     refresh();
   }
 
-  setProject(project);
+  /** The last project kept in this browser, if any; damaged or foreign data is ignored, never fatal. */
+  function restoreLast(): boolean {
+    const text = readKey(store, STORAGE_KEYS.lastBuilding);
+    if (!text) return false;
+    const parsed = parseProject(text, BUILT_IN_MATERIALS);
+    if (!parsed.ok) return false;
+    options.onImportMaterials?.(parsed.customMaterials);
+    const id = readKey(store, STORAGE_KEYS.lastBuildingLibraryId);
+    const entryText = id ? library.load(id) : null;
+    libraryId = entryText !== null ? id : null;
+    setProject(parsed.project);
+    // Dirty relative to the saved copy in the library, if there is one.
+    savedText = entryText !== null ? (() => { const e = parseProject(entryText, BUILT_IN_MATERIALS); return e.ok ? textOf(e.project) : null; })() : null;
+    origin = libraryId ? '' : 'Restored from your last visit; not saved in this browser yet.';
+    renderProjectStatus();
+    if (parsed.project.components.length > 0) showFileMessage(`Restored "${parsed.project.name}" from your last visit.`, 'ok');
+    return true;
+  }
+
+  if (!restoreLast()) setProject(project);
 
   return {
     getProject: () => project,
@@ -570,6 +739,9 @@ export function mountBuildingWorkspace(root: HTMLElement, options: BuildingWorks
     getResult: () => result,
     getSelected: () => selected,
     select,
+    openProjectText: (text, filename) => openProjectText(text, filename),
+    saveToLibrary,
+    library,
     viewer: viewerPanel,
     ready: viewerPanel.ready,
     destroy: () => viewerPanel.destroy(),

@@ -343,3 +343,12 @@ button.danger { color: var(--error); border-color: var(--error); }
 @media (max-width: 700px) {
   .results-panel .results-head, .results-panel[data-tab="results"]:not(.collapsed) .results-head { flex-wrap: wrap; }
 }
+
+/* ---- building project: save state and the library of saved projects ---- */
+.b-library-box { margin: 6px 0; }
+.b-library-box summary { cursor: pointer; font-weight: 600; }
+.b-library { list-style: none; margin: 6px 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.b-library-row { display: flex; gap: 6px; align-items: center; justify-content: space-between; padding: 3px 4px; border: 1px solid transparent; border-radius: 5px; }
+.b-library-row.current { border-color: var(--accent); }
+.b-library-name { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+[data-role="b-save-status"] { margin: 2px 0 6px; }
